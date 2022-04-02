@@ -34,11 +34,20 @@ to setup
 
   importPatterns
   generate_particules
-  foreach (range 0 10 1) [ id ->
-    calculateCentroids
+  let voronoi_iteration 0
+  while [calculateCentroids and voronoi_iteration <= max_Voronoi_Tesselation_iterations]
+  [
+    write "runnig iteration"
+    write voronoi_iteration
+    print "..."
     ask patches [calculate_partitions]
-    print id
+    set voronoi_iteration (voronoi_iteration + 1)
   ]
+  ;;foreach (range 0 10 1) [ id ->
+  ;;  calculateCentroids
+  ;;  ask patches [calculate_partitions]
+  ;;  print id
+  ;;]
   print "stop"
   ;;calculateCentroids
   ;;ask patches [calculate_partitions]
@@ -48,7 +57,7 @@ end
 to initContext
   set patterns_colors []
   set patterns_weights []
-  set-default-shape particules "circle"
+  set-default-shape particules "x"
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -71,7 +80,7 @@ to create_particule [ id ]
     set color particule_pattern
     ifelse show_particules
     [
-      set size 10
+      set size particule_size
     ]
     [
       set size 0
@@ -81,7 +90,7 @@ end
 
 ;; calculate partition
 to calculate_partitions
-  if (patch_pattern != white)
+  if (patch_pattern != "null")
   [
     let p patch_pattern
     set patch_partition [particule_partition] of min-one-of (particules with [particule_pattern = p]) [distance myself]
@@ -147,14 +156,14 @@ to importPatterns
   foreach (range (length patterns_weights - 1) -1 -1) [ x -> drop_pattern x pattern_percentage ]
   ;;update ratio
   let total_ratio sum patterns_weights
-  set patterns_weights map [x -> x / total_ratio] patterns_weights
+  set patterns_weights map [x -> precision (x / total_ratio) 3] patterns_weights
   ;;clear noise: patches wich are not white and not associated with pattern
   ask patches
   [
     if not member? pcolor patterns_colors
     [
-      set patch_pattern white
-      set patch_partition white
+      set patch_pattern "null"
+      set patch_partition "null"
     ]
     set pcolor white
   ]
@@ -203,31 +212,44 @@ to generate_particules
   ask patches [ calculate_partitions ]
 end
 
-;; calculates centroid associated with partition id
-to calculateCentroid [ id ]
-  let nb count patches with [patch_partition = id]
-  if nb != 0 [
-  let x_sum sum [pxcor] of patches with [patch_partition = id]
-  let y_sum sum [pycor] of patches with [patch_partition = id]
-  let x_avg ( x_sum / nb )
-  let y_avg ( y_sum / nb )
-  ask particules with [particule_partition = id]
+;;calculates centroid for all partitions. note: number of partitions = number of robots
+to-report calculateCentroids
+  let partitions_n_patches n-values number_of_robots [0] ;; number of patches per partition
+  let centroids_x n-values number_of_robots [0] ;; x coord for each partition centroid
+  let centroids_y n-values number_of_robots [0] ;; y coord for each partition centroid
+
+  ask patches
   [
-    set xcor x_avg
-    set ycor y_avg
+    if patch_partition != "null"
+    [
+      ;; increment nb of patches
+      set partitions_n_patches replace-item patch_partition partitions_n_patches ( (item patch_partition partitions_n_patches) + 1)
+      ;; increment x
+      set centroids_x replace-item patch_partition centroids_x ( (item patch_partition centroids_x) + pxcor)
+      ;;increment y
+      set centroids_y replace-item patch_partition centroids_y ( (item patch_partition centroids_y) + pycor)
+    ]
   ]
+
+  let update_partition? false
+  ;; update particule position to centroid position
+  foreach (range number_of_robots) [ i ->
+    if (item i partitions_n_patches) != 0
+    [
+      set centroids_x replace-item i centroids_x ( (item i centroids_x) / (item i partitions_n_patches) )
+      set centroids_y replace-item i centroids_y ( (item i centroids_y) / (item i partitions_n_patches) )
+      ask particules with [particule_partition = i]
+      [
+        let tmp_x xcor
+        let tmp_y ycor
+        set xcor (item i centroids_x)
+        set ycor (item i centroids_y)
+        set update_partition? (update_partition?) or (tmp_x - xcor >= tessellation_convergence_goal) or (tmp_y - ycor >= tessellation_convergence_goal)
+      ]
+    ]
   ]
+  report update_partition?
 end
-
-;;calculates centroid for all partitions
-to calculateCentroids
-  ;; for each parttition caculateCentroid
-  foreach (range 0 number_of_robots 1) [ id ->
-    calculateCentroid id
-  ]
-end
-
-
 
 
 
@@ -271,8 +293,8 @@ SLIDER
 number_of_robots
 number_of_robots
 0
-1000
-1000.0
+500
+59.0
 1
 1
 NIL
@@ -305,7 +327,7 @@ pattern_percentage
 0.01
 0.1
 0.01
-0.001
+0.005
 1
 NIL
 HORIZONTAL
@@ -328,7 +350,7 @@ SWITCH
 192
 show_partitions
 show_partitions
-1
+0
 1
 -1000
 
@@ -350,9 +372,54 @@ MONITOR
 105
 NIL
 patterns_weights
-17
+3
 1
 11
+
+SLIDER
+856
+204
+1105
+237
+max_Voronoi_Tesselation_iterations
+max_Voronoi_Tesselation_iterations
+2
+35
+22.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+856
+244
+1106
+277
+tessellation_convergence_goal
+tessellation_convergence_goal
+0
+2
+0.6
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+1003
+121
+1175
+154
+particule_size
+particule_size
+1
+10
+7.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
