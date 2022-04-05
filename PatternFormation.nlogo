@@ -10,12 +10,16 @@ patches-own
   patch_partition       ;; partition associated with this patch
 ]
 breed [particules particule]
+breed [robots robot]
 particules-own
 [
   particule_pattern
   particule_partition    ;; partition associated with this particule
 ]
-
+robots-own
+[
+  max_speed
+]
 ;; import pattern
 ;; gen points a l'interieur de pattern
 ;; voronoi partitions
@@ -28,36 +32,30 @@ particules-own
 ;; ███████ ███████    ██     ██████  ██
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to setup_default
+  clear-all
+  output-print "--SETUP STARTED--"
+  initContext
+  importDefaultPatterns
+  generateGoals
+  generate_robots
+  output-print "--SETUP ENDED--"
+end
 to setup
   clear-all
+  output-print "--SETUP STARTED--"
   initContext
-
   importPatterns
-  generate_particules
-  let voronoi_iteration 0
-  while [calculateCentroids and voronoi_iteration <= max_Voronoi_Tesselation_iterations]
-  [
-    write "runnig iteration"
-    write voronoi_iteration
-    print "..."
-    ask patches [calculate_partitions]
-    set voronoi_iteration (voronoi_iteration + 1)
-  ]
-  ;;foreach (range 0 10 1) [ id ->
-  ;;  calculateCentroids
-  ;;  ask patches [calculate_partitions]
-  ;;  print id
-  ;;]
-  print "stop"
-  ;;calculateCentroids
-  ;;ask patches [calculate_partitions]
-  reset-ticks
+  generateGoals
+  generate_robots
+  output-print "--SETUP ENDED--"
 end
 
 to initContext
   set patterns_colors []
   set patterns_weights []
   set-default-shape particules "x"
+  set-default-shape robots "circle 3"
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -80,7 +78,7 @@ to create_particule [ id ]
     set color particule_pattern
     ifelse show_particules
     [
-      set size particule_size
+      set size robot_size
     ]
     [
       set size 0
@@ -101,6 +99,35 @@ to calculate_partitions
   ]
 end
 
+to create_robot
+  sprout-robots 1 [
+    set size robot_size
+    set color [color] of (particule (who - number_of_robots ))
+  ]
+end
+
+to generate_robots
+  ask n-of number_of_robots patches [create_robot]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;  ██████   ██████
+;; ██       ██    ██
+;; ██   ███ ██    ██
+;; ██    ██ ██    ██
+;;  ██████   ██████
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to go
+  ask robots [ move_to_goal ]
+end
+
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -111,6 +138,11 @@ end
 ;;    ██     ██████  ██   ██    ██    ███████ ███████ ███████
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to move_to_goal
+  face ( particule (who - number_of_robots ) )
+  fd 0.01
+end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -125,16 +157,25 @@ end
 ;;Pattern est defini
 ;;  - pattern_color
 ;;  - partitions
-
-
-;; imports file, creates patterns and paints patches accordingly
 to importPatterns
-  ;; white patches are not associated with a pattern
   ask patches [
     set pcolor white
   ]
   ;; import image and paint patches
   import-pcolors user-file
+end
+
+to importDefaultPatterns
+  ask patches [
+    set pcolor white
+  ]
+  let file word (word "DefaultPatterns/" defaul_pattern) ".png"
+  ;; import image and paint patches
+  import-pcolors file
+end
+
+;; imports file, creates patterns and paints patches accordingly
+to createPatterns
   ;; fill patterns data (color, ratio)
   ask patches [
     ;; link patch to pattern
@@ -156,7 +197,7 @@ to importPatterns
   foreach (range (length patterns_weights - 1) -1 -1) [ x -> drop_pattern x pattern_percentage ]
   ;;update ratio
   let total_ratio sum patterns_weights
-  set patterns_weights map [x -> precision (x / total_ratio) 3] patterns_weights
+  set patterns_weights map [x -> precision (x / total_ratio) 2] patterns_weights
   ;;clear noise: patches wich are not white and not associated with pattern
   ask patches
   [
@@ -185,9 +226,16 @@ to drop_pattern [x percentage]
 end
 
 ;; calculates number_of_particules (robots) associated with pattern from ratio
-to-report calcul_number_of_particules [id]
-  ;; Todo: make sure we solve attribution problems for example if ratios 0.5 0.5 and 3 robots => 1.5 rounded to 2 so we spawn 4 particules in total
-  report round (item id patterns_weights * number_of_robots)
+to-report calcul_number_of_particules
+  let number_of_particules []
+  foreach (range length patterns_weights) [ id ->
+    set number_of_particules lput round (item id patterns_weights * number_of_robots) number_of_particules
+  ]
+  let sum_particules sum number_of_particules
+  let diff (sum_particules - number_of_robots)
+  let max_n (max number_of_particules)
+  set number_of_particules replace-item (position max_n number_of_particules) number_of_particules (max_n - diff)
+  report number_of_particules
 end
 
 ;; generates number_of_particules particules starting from id to id+number_of_particules on pattern p
@@ -203,13 +251,12 @@ end
 to generate_particules
   ;; start particules id at 0
   let particules_index 0
+  let number_of_particules calcul_number_of_particules
   ;; for each pattern calculate required number of particules and generate particules
-  foreach (range 0 (length patterns_weights) 1) [ id ->
-    let number_of_particules (calcul_number_of_particules id)
-    pattern_generate_particules number_of_particules (item id patterns_colors) (particules_index)
-    set particules_index (particules_index + number_of_particules)
+  foreach (range length patterns_weights) [ id ->
+    pattern_generate_particules (item id number_of_particules) (item id patterns_colors) (particules_index)
+    set particules_index (particules_index + (item id number_of_particules))
   ]
-  ask patches [ calculate_partitions ]
 end
 
 ;;calculates centroid for all partitions. note: number of partitions = number of robots
@@ -218,17 +265,14 @@ to-report calculateCentroids
   let centroids_x n-values number_of_robots [0] ;; x coord for each partition centroid
   let centroids_y n-values number_of_robots [0] ;; y coord for each partition centroid
 
-  ask patches
+  ask patches with [ patch_partition != "null" ]
   [
-    if patch_partition != "null"
-    [
       ;; increment nb of patches
       set partitions_n_patches replace-item patch_partition partitions_n_patches ( (item patch_partition partitions_n_patches) + 1)
       ;; increment x
       set centroids_x replace-item patch_partition centroids_x ( (item patch_partition centroids_x) + pxcor)
       ;;increment y
       set centroids_y replace-item patch_partition centroids_y ( (item patch_partition centroids_y) + pycor)
-    ]
   ]
 
   let update_partition? false
@@ -236,22 +280,185 @@ to-report calculateCentroids
   foreach (range number_of_robots) [ i ->
     if (item i partitions_n_patches) != 0
     [
-      set centroids_x replace-item i centroids_x ( (item i centroids_x) / (item i partitions_n_patches) )
-      set centroids_y replace-item i centroids_y ( (item i centroids_y) / (item i partitions_n_patches) )
       ask particules with [particule_partition = i]
       [
         let tmp_x xcor
         let tmp_y ycor
-        set xcor (item i centroids_x)
-        set ycor (item i centroids_y)
-        set update_partition? (update_partition?) or (tmp_x - xcor >= tessellation_convergence_goal) or (tmp_y - ycor >= tessellation_convergence_goal)
+        set xcor ( (item i centroids_x) / (item i partitions_n_patches) )
+        set ycor ( (item i centroids_y) / (item i partitions_n_patches) )
+        set update_partition? (update_partition?) or (tmp_x - xcor > tessellation_convergence_goal) or (tmp_y - ycor > tessellation_convergence_goal)
       ]
     ]
   ]
   report update_partition?
 end
 
+to voronoi_tesselation
+  ask patches [calculate_partitions]
+  let voronoi_iteration 0
+  while [calculateCentroids  and voronoi_iteration <= max_Voronoi_Tesselation_iterations]
+  [
+    output-print word (word "___Voronoi_tesselation: runnig iteration " voronoi_iteration) "..."
+    ask patches [calculate_partitions]
+    set voronoi_iteration (voronoi_iteration + 1)
+  ]
+end
 
+to generateGoals
+  createPatterns
+  generate_particules
+  voronoi_tesselation
+  reset-ticks
+end
+
+;;https://stackoverflow.com/questions/39984709/how-can-i-check-wether-a-point-is-inside-the-circumcircle-of-3-points
+;;https://www.wikiwand.com/en/Delaunay_triangulation
+;;returns true if triangle is ccw
+to-report ccw [ax ay bx by cx cy]
+   report (bx - ax) * (cy - ay)-(cx - ax) * (by - ay) > 0
+end
+
+;; returns true if x y inside circumcircle of abc
+to-report inCircle [ax ay bx by cx cy x y]
+    let ax_  ax - x;
+    let ay_  ay - y;
+    let bx_  bx - x;
+    let by_  by - y;
+    let cx_  cx - x;
+    let cy_  cy - y;
+    report (
+        (ax_ * ax_ + ay_ * ay_) * (bx_ * cy_ - cx_ * by_) -
+        (bx_ * bx_ + by_ * by_) * (ax_ * cy_ - cx_ * ay_) +
+        (cx_ * cx_ + cy_ * cy_) * (ax_ * by_ - bx_ * ay_)
+    ) > 0
+end
+
+;;https://www.wikiwand.com/en/Bowyer%E2%80%93Watson_algorithm
+to delaunay_triangulation [pattern_id]
+  let points particules with [particule_pattern = pattern_id]
+  let verts_x [-1000 0 1000]
+  let verts_y [-1000 1000 -1000]
+  let triangles [ [0 2 1] ]
+
+
+  ask points
+  [
+    let edges []
+    let incorrect_triangles []
+
+    ;;for each triangle
+    foreach triangles[ triangle ->
+      ;;if point within circumcircle
+      if ( inCircle
+        (item (item 0 triangle) verts_x)
+        (item (item 0 triangle) verts_y)
+        (item (item 1 triangle) verts_x)
+        (item (item 1 triangle) verts_y)
+        (item (item 2 triangle) verts_x)
+        (item (item 2 triangle) verts_y)
+        (xcor) (ycor)
+        )
+      [
+        ;;set triangle as incorrect
+        set incorrect_triangles lput triangle incorrect_triangles
+      ]
+    ]
+
+    ;; for each incorrect triangle t, for each edge in t if edge is not shared by any other incorrect triangle add edge to edges
+    foreach incorrect_triangles [ t ->
+
+      let others remove t incorrect_triangles
+      let e1 list (item 0 t) (item 1 t)
+      let e2 list (item 0 t) (item 2 t)
+      let e3 list (item 1 t) (item 2 t)
+
+      let add_e1 true
+      let add_e2 true
+      let add_e3 true
+
+      foreach others [ other_t ->
+        if member? item 0 e1 other_t and member? item 1 e1 other_t
+        [
+          set add_e1 false
+        ]
+        if member? item 0 e2 other_t and member? item 1 e2 other_t
+        [
+          set add_e2 false
+        ]
+        if member? item 0 e3 other_t and member? item 1 e3 other_t
+        [
+          set add_e3 false
+        ]
+      ]
+      if add_e1 [ set edges lput e1 edges ]
+      if add_e2 [ set edges lput e2 edges ]
+      if add_e3 [ set edges lput e3 edges ]
+    ]
+
+
+    ;; remove incorrect triangles
+    foreach incorrect_triangles [ t ->
+      set triangles remove t triangles
+    ]
+
+    set verts_x lput xcor verts_x
+    set verts_y lput ycor verts_y
+    let l ( ( length verts_x ) - 1 )
+    let new_triangle []
+
+    ;; build triangles
+    while [ not empty? edges]
+    [
+      let edge first edges
+      set edges but-first edges
+
+      ;; construct new counter clock wise triangle
+      ifelse ccw (item (item 0 edge) verts_x) (item (item 0 edge) verts_y) (item (item 1 edge) verts_x) (item (item 1 edge) verts_y) xcor ycor
+      [
+        set new_triangle ( list (item 0 edge) (item 1 edge) l)
+      ]
+      [
+        set new_triangle ( list (item 0 edge) l (item 1 edge))
+      ]
+      ;; add new triangle
+      set triangles lput new_triangle triangles
+    ]
+  ]
+
+  ;; for each triangl if triangle contains vertex from super triangle remove triangle
+  foreach triangles [ t ->
+    ;; super triangle [0 2 1]
+    if (
+      item 0 t = 0 or item 1 t = 0 or item 2 t = 0
+      or
+      item 0 t = 2 or item 1 t = 2 or item 2 t = 2
+      or
+      item 0 t = 1 or item 1 t = 1 or item 2 t = 1
+    )
+    [
+      set triangles remove t triangles
+    ]
+  ]
+
+  create-turtles 1
+  [
+    foreach triangles [ t ->
+      set color ( color + 15 )
+      setxy item (item 0 t) verts_x item (item 0 t) verts_y
+      pen-down
+      setxy item (item 1 t) verts_x item (item 1 t) verts_y
+      setxy item (item 2 t) verts_x item (item 2 t) verts_y
+      setxy item (item 0 t) verts_x item (item 0 t) verts_y
+      pen-up
+    ]
+  ]
+end
+
+to test
+  foreach patterns_colors [ c ->
+    delaunay_triangulation c
+  ]
+end
 
 
 
@@ -259,10 +466,10 @@ end
 
 @#$#@#$#@
 GRAPHICS-WINDOW
-307
+475
 10
-716
-420
+1034
+570
 -1
 -1
 1.0
@@ -275,10 +482,10 @@ GRAPHICS-WINDOW
 0
 0
 1
--200
-200
--200
-200
+-275
+275
+-275
+275
 0
 0
 1
@@ -286,25 +493,25 @@ ticks
 30.0
 
 SLIDER
-40
-48
-216
-81
+34
+73
+389
+106
 number_of_robots
 number_of_robots
 0
-500
-59.0
+250
+110.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
-39
-182
-211
-215
+32
+261
+384
+294
 NIL
 setup
 NIL
@@ -318,10 +525,10 @@ NIL
 1
 
 SLIDER
-43
-90
-215
-123
+1043
+110
+1215
+143
 pattern_percentage
 pattern_percentage
 0.01
@@ -333,21 +540,21 @@ NIL
 HORIZONTAL
 
 SWITCH
-855
-121
-999
-154
+1044
+153
+1188
+186
 show_particules
 show_particules
-0
+1
 1
 -1000
 
 SWITCH
-856
-159
-999
-192
+1191
+153
+1334
+186
 show_partitions
 show_partitions
 0
@@ -355,10 +562,10 @@ show_partitions
 -1000
 
 MONITOR
-853
-12
-1317
-57
+1043
+10
+1507
+55
 NIL
 patterns_colors
 17
@@ -366,10 +573,10 @@ patterns_colors
 11
 
 MONITOR
-853
-60
-1318
-105
+1043
+58
+1508
+103
 NIL
 patterns_weights
 3
@@ -377,13 +584,13 @@ patterns_weights
 11
 
 SLIDER
-856
-204
-1105
-237
+1045
+234
+1294
+267
 max_Voronoi_Tesselation_iterations
 max_Voronoi_Tesselation_iterations
-2
+1
 35
 22.0
 1
@@ -392,34 +599,102 @@ NIL
 HORIZONTAL
 
 SLIDER
-856
-244
-1106
-277
+1045
+274
+1295
+307
 tessellation_convergence_goal
 tessellation_convergence_goal
 0
 2
-0.6
+0.35
 0.05
 1
 NIL
 HORIZONTAL
 
-SLIDER
-1003
-121
-1175
-154
-particule_size
-particule_size
+BUTTON
+77
+340
+140
+373
+NIL
+test
+NIL
 1
-10
-7.0
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+CHOOSER
+32
+209
+205
+254
+defaul_pattern
+defaul_pattern
+"triangle" "rectangle" "circle" "ring" "stars" "2Lines" "gradientShapes" "falling_arrows" "flag" "flag1" "Google" "Stack_Overflow" "discord" "robot" "flame" "cyclops"
+12
+
+BUTTON
+209
+210
+385
+255
+NIL
+setup_default
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+OUTPUT
+31
+118
+386
+204
+11
+
+SLIDER
+34
+34
+206
+67
+robot_size
+robot_size
+3
+20
+11.0
 1
 1
 NIL
 HORIZONTAL
+
+BUTTON
+151
+340
+214
+373
+NIL
+go
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -524,6 +799,12 @@ false
 0
 Circle -7500403 true true 0 0 300
 Circle -16777216 true false 30 30 240
+
+circle 3
+false
+1
+Circle -2674135 false true 0 0 300
+Circle -2674135 false true 90 90 120
 
 cow
 false
