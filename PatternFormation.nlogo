@@ -462,8 +462,6 @@ end
 
 
 
-
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 475
@@ -501,7 +499,7 @@ number_of_robots
 number_of_robots
 0
 250
-110.0
+250.0
 1
 1
 NIL
@@ -557,14 +555,14 @@ SWITCH
 186
 show_partitions
 show_partitions
-0
+1
 1
 -1000
 
 MONITOR
-1043
+1042
 10
-1507
+1492
 55
 NIL
 patterns_colors
@@ -573,9 +571,9 @@ patterns_colors
 11
 
 MONITOR
-1043
+1042
 58
-1508
+1494
 103
 NIL
 patterns_weights
@@ -592,7 +590,7 @@ max_Voronoi_Tesselation_iterations
 max_Voronoi_Tesselation_iterations
 1
 35
-22.0
+10.0
 1
 1
 NIL
@@ -607,7 +605,7 @@ tessellation_convergence_goal
 tessellation_convergence_goal
 0
 2
-0.35
+0.55
 0.05
 1
 NIL
@@ -673,7 +671,7 @@ robot_size
 robot_size
 3
 20
-11.0
+7.0
 1
 1
 NIL
