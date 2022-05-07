@@ -1,55 +1,47 @@
 globals
 [
   ;;PATTERNS;;
-  patterns_colors       ;; id/color defining a pattern
-  patterns_weights      ;; ratio of pattern among all patterns
+  patterns_colors       ;; id/color definissant un pattern
+  patterns_weights      ;; ratio qui represente le pattern sur la fenetre d'affichage
 
   lnk_id_cnt
 ]
 
 patches-own
 [
-  patch_pattern         ;; pattern id/color associated whit this patch
-  patch_partition       ;; partition associated with this patch
+  patch_pattern         ;; pattern id/color associe a ce patch
+  patch_partition       ;; partition associee a ce patch
 ]
 
 
-breed [particules particule]
-breed [robots robot]
+breed [particules particule] ;; particule represente les positions finales a atteindre; turtle "fictive" utilise uniquement pour des calculs, ici le centre d'une partion voronoi
 particules-own
 [
-  particule_pattern
-  particule_partition    ;; partition associated with this particule
+  particule_pattern      ;; pattern associe
+  particule_partition    ;; partition associee
 ]
+
+
+breed [robots robot]
 robots-own
 [
-  velocity
-  pref_velocity
-  new_velocity
-  orca_lines
-  collision_neighbors
-  goal
-
-  repulsive
-  attraction
-
+  velocity               ;; vector (x,y) representant la vitesse actuelle
+  pref_velocity          ;; vector (x,y) reprensentant la vitesse preferee càd celle qui amene le robot a son objectif
+  new_velocity           ;; vector (x,y) reprensentant la vitesse a l'etape suivante
+  orca_lines             ;; ensemble contraintes/lignes orca definissant la frontiere entre les vitesses valables et les vitesses de collision
+  collision_neighbors    ;; ensemble d'agents dans le radius de detection càd presntant un risque de collision
+  goal                   ;; objectif a atteindre pour cette etape, a chaque etape calculer nouveau objecif en utilisant algo hongrois
 ]
 
 
-;; every link breed must be declared as either directed or undirected
-directed-link-breed [red-links red-link]
-breed [lnks lnk]
-
+directed-link-breed [red-links red-link] ;; utilise pour dessiner le vecteur vitesse
+breed [lnks lnk] ;; turtle "fictive" utilis pour tracer les lignes orca
 lnks-own
 [
-lnk_id
+  lnk_id
 ]
 
 
-
-;; import pattern
-;; gen points a l'interieur de pattern
-;; voronoi partitions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ███████ ███████ ████████ ██    ██ ██████
@@ -59,30 +51,44 @@ lnk_id
 ;; ███████ ███████    ██     ██████  ██
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-to setup_default
+
+to setup_default ;; import png inclus dans dossier base
   clear-all
+  display_construction?
   output-print "--SETUP STARTED--"
   initContext
   importDefaultPatterns
   generateGoals
   generate_robots
   output-print "--SETUP ENDED--"
+  display
 end
-to setup
+
+to setup ;; import png qlconque, permet a l'utilisateur de parcourir ces fichiers
   clear-all
+  display_construction?
   output-print "--SETUP STARTED--"
   initContext
   importPatterns
   generateGoals
   generate_robots
   output-print "--SETUP ENDED--"
+  display
 end
 
-to initContext
+to initContext ;;initialise le contexte de base
   set patterns_colors []
   set patterns_weights []
   set-default-shape particules "x"
-  set-default-shape robots "circle 3"
+  set-default-shape robots "circle"
+  ;;set-default-shape robots "circle 3"
+end
+
+to display_construction?
+  reset-ticks
+  ifelse (show_particules or show_partitions or show_grid)
+  [display]
+  [no-display]
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -95,8 +101,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; spawns a particule on patch
-to create_particule [ id ]
+
+to create_particule [ id ] ;; spawns une particlue associée a la partition id dans le patch appelant
   sprout-particules 1 [
 
     set particule_pattern patch_pattern
@@ -113,8 +119,8 @@ to create_particule [ id ]
   ]
 end
 
-;; calculate partition
-to calculate_partitions
+
+to calculate_partitions  ;; calcule la partition associee
   if (patch_pattern != "null")
   [
     let p patch_pattern
@@ -126,29 +132,72 @@ to calculate_partitions
   ]
 end
 
-to create_robot
+to create_robot ;; spawns un robot dans le patch appelant
   sprout-robots 1 [
     set size robot_size
-    set color [color] of (particule (who - number_of_robots ))
-    set velocity list (random 2 - random 4) (random 2 - random 4)
-    set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
+    set velocity list (0) (0)
     set new_velocity list 0 0
-    set repulsive []
+
+    ;; TODO: a virer une fois ayant l'algo hongrois
+    set goal [who] of (particule (who - number_of_robots ))
+    ;;set color [color] of (particule (who - number_of_robots ))
+    ;;set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
 
   ]
 end
 
-to generate_robots
+to generate_robots ;; genere des robots de façon a ne pas avoir des robots superposes
   output-print "Generating Robots "
   output-print "Making sure they don't overlap... "
-  let n_robots_spawned 0
-  ask patches [
-    if ( not any? robots in-radius (robot_size) and n_robots_spawned < (number_of_robots))
-    [
-      set n_robots_spawned (n_robots_spawned + 1)
-      create_robot
+
+  let pos ((robot_size * 1.5) / 2)
+  let n_slots floor (world-width / (robot_size * 1.5))
+  let available_slots []
+  ;;let available_slots_y ( range n_slots )
+
+  foreach ( range (n_slots - 1))[ x ->
+    foreach ( range (n_slots - 1))[ y ->
+      set available_slots lput list (x) (y) available_slots
     ]
   ]
+
+  let n_robots_spawned 0
+  let i 0
+  let coord 0
+  let x 0
+  let y 0
+
+  if ( show_grid )[
+    ask patches[
+      if ((pxcor mod robot_size = 0) or (pycor mod robot_size = 0))[set pcolor red]
+      if ((pxcor = 0) or (pycor = 0))[set pcolor green]
+    ]
+  ]
+
+
+  while [ n_robots_spawned < number_of_robots] [
+
+    set i random (length available_slots - 1)
+
+    set coord item i available_slots
+    set x (item 0 coord) + 1
+    set y (item 1 coord) + 1
+    set available_slots remove-item i available_slots
+
+    if (x mod 2 = 0) [set x (- x + 1)]
+    if (y mod 2 = 0) [set y (- y + 1)]
+
+    set x (x * pos)
+    set y (y * pos)
+
+    ask patch x y [
+      create_robot
+    ]
+
+    set n_robots_spawned (n_robots_spawned + 1)
+
+  ]
+
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -162,33 +211,23 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+  ;; nettoyage lignes affichage
   set lnk_id_cnt 0
   clear-drawing
   ask-concurrent lnks [
     die
   ]
+
+  ;; mvmnt robots
   tick-advance 1
-  ask robots [ calculate_new_vel ]
+  ;; TODO: ajout calcul objectif et changement color algo hongrois
+  ask robots [
+    set_color_goal
+    calculate_preferred_velocity
+    calculate_new_velocity
+  ]
   ask robots [ move_to_goal ]
 end
-
-
-
-
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ████████ ██    ██ ██████  ████████ ██      ███████ ███████
-;;    ██    ██    ██ ██   ██    ██    ██      ██      ██
-;;    ██    ██    ██ ██████     ██    ██      █████   ███████
-;;    ██    ██    ██ ██   ██    ██    ██      ██           ██
-;;    ██     ██████  ██   ██    ██    ███████ ███████ ███████
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -201,14 +240,11 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;Pattern est defini
-;;  - pattern_color
-;;  - partitions
 to importPatterns
-  ask-concurrent patches [
+  ask patches [
     set pcolor white
   ]
-  ;; import image and paint patches
+  ;; imports image et paint patches
   import-pcolors user-file
 end
 
@@ -217,17 +253,17 @@ to importDefaultPatterns
     set pcolor white
   ]
   let file word (word "DefaultPatterns/" defaul_pattern) ".png"
-  ;; import image and paint patches
+  ;; imports image et paint patches
   import-pcolors file
 end
 
-;; imports file, creates patterns and paints patches accordingly
+;; imports file, cree patterns data
 to createPatterns
-  ;; fill patterns data (color, ratio)
+  ;; rempli patterns data (color, ratio)
   ask patches [
-    ;; link patch to pattern
+    ;; associe patch to pattern
     set patch_pattern pcolor
-    ;; if patch color not in patterns_colors add, else increment
+    ;; if patch color not in patterns_colors ajout, else increment
     ifelse not member? pcolor patterns_colors
     [
       set patterns_colors lput pcolor patterns_colors
@@ -239,13 +275,13 @@ to createPatterns
       set patterns_weights replace-item pattern_index patterns_weights ( item pattern_index patterns_weights + 1 )
     ]
   ]
-  ;; output from import-pcolors file has some noise so we clean the new_velocitys
+  ;; output de import-pcolors file a du bruit pixels de color legerement different qui poses des pb de calul
   ;; drop 'fake patterns': from last index to 0 at -1 pace
   foreach (range (length patterns_weights - 1) -1 -1) [ x -> drop_pattern x pattern_percentage ]
   ;;update ratio
   let total_ratio sum patterns_weights
   set patterns_weights map [x -> precision (x / total_ratio) 2] patterns_weights
-  ;;clear noise: patches wich are not white and not associated with pattern
+  ;;nettoyage bruit: patches non white et non associes a un pattern
   ask patches
   [
     if not member? pcolor patterns_colors
@@ -257,8 +293,8 @@ to createPatterns
   ]
 end
 
-;;drops pattern x if ratio < percentage
-to drop_pattern [x percentage]
+
+to drop_pattern [x percentage] ;; drops pattern x if ratio < percentage
   let weight item x patterns_weights
   let ratio ( weight / count patches )
 
@@ -272,8 +308,8 @@ to drop_pattern [x percentage]
   ]
 end
 
-;; calculates number_of_particules (robots) associated with pattern from ratio
-to-report calcul_number_of_particules
+
+to-report calcul_number_of_particules ;; calcule number_of_particules (robots) associe a pattern a partir de son ratio
   let number_of_particules []
   foreach (range length patterns_weights) [ id ->
     set number_of_particules lput round (item id patterns_weights * number_of_robots) number_of_particules
@@ -285,8 +321,8 @@ to-report calcul_number_of_particules
   report number_of_particules
 end
 
-;; generates number_of_particules particules starting from id to id+number_of_particules on pattern p
-to pattern_generate_particules [number_of_particules p id]
+
+to pattern_generate_particules [number_of_particules p id] ;; genere number_of_particules particules starting from id to id+number_of_particules on pattern p
   ask n-of number_of_particules patches with [patch_pattern = p]
   [
     create_particule id
@@ -294,20 +330,21 @@ to pattern_generate_particules [number_of_particules p id]
   ]
 end
 
-;; genretes particlues for each pattern
-to generate_particules
+
+to generate_particules ;; genere particlues pour chaque pattern
   ;; start particules id at 0
   let particules_index 0
   let number_of_particules calcul_number_of_particules
-  ;; for each pattern calculate required number of particules and generate particules
+  ;; pour chaque pattern calcule nombre necessaire de particules et genere
   foreach (range length patterns_weights) [ id ->
     pattern_generate_particules (item id number_of_particules) (item id patterns_colors) (particules_index)
     set particules_index (particules_index + (item id number_of_particules))
   ]
 end
 
-;;calculates centroid for all partitions. note: number of partitions = number of robots
-to-report calculateCentroids
+
+to-report calculateCentroids ;;calcule centroid pour toute partition. note: number of partitions = number of robots
+
   let partitions_n_patches n-values number_of_robots [0] ;; number of patches per partition
   let centroids_x n-values number_of_robots [0] ;; x coord for each partition centroid
   let centroids_y n-values number_of_robots [0] ;; y coord for each partition centroid
@@ -340,18 +377,20 @@ to-report calculateCentroids
   report update_partition?
 end
 
-to voronoi_tesselation
+to voronoi_tesselation ;; calcule nouveau centroid, nouvelle partion jusqu'a atteindre niveau de detail acceptable
+  tick-advance 1
   ask patches [calculate_partitions]
   let voronoi_iteration 0
   while [calculateCentroids  and voronoi_iteration <= max_Voronoi_Tesselation_iterations]
   [
+    tick-advance 1
     output-print word (word "___Voronoi_tesselation: runnig iteration " voronoi_iteration) "..."
     ask patches [calculate_partitions]
     set voronoi_iteration (voronoi_iteration + 1)
   ]
 end
 
-to generateGoals
+to generateGoals ;; genere les objectifs = positions finales
   createPatterns
   generate_particules
   voronoi_tesselation
@@ -368,10 +407,35 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+to set_color_goal
+  set color [color] of (particule goal)
+end
 
-to calculate_new_vel
-  set pref_velocity scale_vec normalize (list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)) (0.9 * max_speed)
-  ;;set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
+to calculate_preferred_velocity
+
+  let preferred_speed(0.9 * max_speed)
+
+  let g_x [xcor] of (particule goal)
+  let g_y [ycor] of (particule goal)
+
+  let relative_pos_to_goal list ( g_x - xcor) ( g_y - ycor )
+  let len_relative_pos abs_ relative_pos_to_goal
+
+  let k (max_speed * k_a_controller)
+
+  let relpos/lenrelpos scale_vector (relative_pos_to_goal) (1 / len_relative_pos )
+  let lenrelpos/k (len_relative_pos / k)
+  let m min (list (1) (lenrelpos/k))
+  set pref_velocity scale_vector (relpos/lenrelpos) (preferred_speed * m)
+
+end
+
+
+
+
+to calculate_new_velocity
+  ;; TODO : changer de façon a calculer pref velocity en accor avec le sujet
+  ;;set pref_velocity scale_vector normalize_vector (list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)) (0.9 * max_speed)
   set collision_neighbors other robots in-radius collision_detection_range
   compute_new_velocity_ORCA
 end
@@ -384,19 +448,20 @@ end
 
 
 
-
-
 ;;Note:
-;;     Ayant trouv l'application mathématique du sujet compliqué partie ORCA nous nous sommes aidé
+;;     Ayant trouvé l'application mathématique du sujet partie ORCA compliqué nous nous sommes aidé
 ;;     de l'implémentation déjà existante du problème présenté en [18]
 ;;     - J. van den Berg, S. J. Guy, M. Lin and D. Manocha, ”Reciprocal nbody Collision Avoidance”, in Int. Symp. on Robotics Research, 2009. -
 ;;     se trouvant dans
 ;;     https://github.com/snape/RVO2
 ;;
 ;;
-;;     Nous ne prétendons pas être être à l'origine de cette implémentation, nous servi du code existant et nous l'avons adapté a notre problème et le langage netlogo
+;;     Nous ne prétendons pas être être à l'origine de cet algorithme, nous servi du code existant et nous l'avons adapté a notre problème et le langage netlogo
 
 
+;; 1- Calcule les lignes orca pour chaque agent dans le radius de vision, càd les agents qui représente possiblement une collision
+;; 2- Résout un pblinéaire pour trouver la nouvelle vitesse qui respecte les contraintes orca et qui est proche de la vitesse preferee
+;; 3- si l'etape precedente echoue, resout un pblineaire de dimension superieure 3
 to compute_new_velocity_ORCA
   set orca_lines []
 
@@ -410,7 +475,7 @@ to compute_new_velocity_ORCA
 
     let relativePosition list ( [xcor] of (robot agent_B_id) - xcor) ([ycor] of (robot agent_B_id) - ycor)
 
-    let relativeVelocity (minus_vec (velocity) ([velocity] of (robot agent_B_id)))
+    let relativeVelocity (minus_vectors (velocity) ([velocity] of (robot agent_B_id)))
 
     let distSq abs_Sq relativePosition
 
@@ -424,22 +489,23 @@ to compute_new_velocity_ORCA
 
     ifelse (distSq > combinedRadiusSq)
     [
-      ;;No collison
-      ;;Agents are not touching one another
-      let w (minus_vec (relativeVelocity) (relativePosition))
+      ;;Pas de collision
+      ;;Les agents ne se touchent pas
+
+      let w (minus_vectors (relativeVelocity) (relativePosition))
 
       let wLengthSq abs_Sq w
 
-      let dp1 multiply_vec w relativePosition
+      let dp1 multiply_vectors w relativePosition
 
       ifelse(dp1 < 0 and sqr dp1 > (combinedRadiusSq * wLengthSq) )
       [
         let wLength sqrt wLengthSq
-        let unitW scale_vec w ( 1 / wLength )
+        let unitW scale_vector w ( 1 / wLength )
 
         ;;line.direction = Vector2(unitW.y(), -unitW.x());
         set line replace-item 1 line list ( item 1 unitW ) (- item 0 unitW )
-        set u scale_vec unitW (combinedRadius - wLength)
+        set u scale_vector unitW (combinedRadius - wLength)
 
       ]
       [
@@ -451,40 +517,40 @@ to compute_new_velocity_ORCA
           let d_x item 0 relativePosition * leg - item 1 relativePosition * combinedRadius
           let d_y item 0 relativePosition * combinedRadius + item 1 relativePosition * leg
 
-          set line replace-item 1 line (scale_vec (list (d_x) (d_y)) (1 / distSq))
+          set line replace-item 1 line (scale_vector (list (d_x) (d_y)) (1 / distSq))
         ]
         [
           ;;line.direction = -Vector2(relativePosition.x() * leg + relativePosition.y() * combinedRadius, -relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
           let d_x item 0 relativePosition * leg + item 1 relativePosition * combinedRadius
           let d_y  (- (item 0 relativePosition)) * combinedRadius + item 1 relativePosition * leg
 
-          set line replace-item 1 line scale_vec (list (d_x) (d_y)) (- 1 / distSq)
+          set line replace-item 1 line scale_vector (list (d_x) (d_y)) (- 1 / distSq)
         ];;end_ifelse
 
         ;;dotProduct2 = relativeVelocity * line.direction;
-        let dp2 multiply_vec relativeVelocity item 1 line
+        let dp2 multiply_vectors relativeVelocity item 1 line
 
-        set u minus_vec (scale_vec item 1 line dp2) (relativeVelocity)
+        set u minus_vectors (scale_vector item 1 line dp2) (relativeVelocity)
       ];;end_ifelse
     ];;end_ifelse
     [
       ;;Collision. Project on cut-off circle of time timeStep. In our implementation 1
-      let w (minus_vec (relativeVelocity) (relativePosition))
+      let w (minus_vectors (relativeVelocity) (relativePosition))
 
-      ;;let unitW normalize w
+      ;;let unitW normalize_vector w
       ;;normalisation?
       let wLenght abs_ w
-      let unitW scale_vec w (1 / wLenght)
+      let unitW scale_vector w (1 / wLenght)
 
 
       ;;line.direction = Vector2(unitW.y(), -unitW.x());
       set line replace-item 1 line list (item 1 unitW) (- (item 0 unitW))
 
-      set u (scale_vec (unitW) (combinedRadius - wLenght))
+      set u (scale_vector (unitW) (combinedRadius - wLenght))
     ]
 
     ;;line.point = velocity_ + 0.5f * u;
-    set line replace-item 0 line (add_vec (velocity) (scale_vec u 0.5))
+    set line replace-item 0 line (add_vectors (velocity) (scale_vector u 0.5))
     set orca_lines lput line orca_lines
 
   ];;end_foreach
@@ -496,12 +562,16 @@ to compute_new_velocity_ORCA
     linearProgram3 orca_lines 0 lineFail max_speed
   ]
 
+  show_guidelines
+
 end
 
+
+;;affiche les vecteurs de vitesse et les lignes orca
 to show_guideLines
-    if (show_Orca_Lines)
+  if (show_Orca_Lines)
   [
-    let col 0
+    let col random 140
     foreach (orca_lines) [line ->
 
       let point item 0 line
@@ -516,13 +586,14 @@ to show_guideLines
           setxy (xcor + (item 0 point)) (ycor + (item 1 point))
           set lnk_id i
           set size 0
-          set col col + 5
+          set col col + 2
           set color col
+          set pen-size line_width
           pen-down
           let k 0
-          let vtt normalize list (xcor + (item 0 direction)) (ycor +(item 1 direction))
-          setxy (xcor + (item 0 vtt) * (robot_size * 2 )) (ycor + (item 1 vtt) * (robot_size * 2))
-          setxy (xcor + (item 0 vtt) * (- (robot_size * 4) )) (ycor + (item 1 vtt) * (- (robot_size * 4) ))
+          let orca_vector normalize_vector list (xcor + (item 0 direction)) (ycor +(item 1 direction))
+          setxy (xcor + (item 0 orca_vector) * (robot_size * 2 )) (ycor + (item 1 orca_vector) * (robot_size * 2))
+          setxy (xcor + (item 0 orca_vector) * (- (robot_size * 4) )) (ycor + (item 1 orca_vector) * (- (robot_size * 4) ))
         ]
       ]
     ];;end_foreach
@@ -566,18 +637,18 @@ end
 ;; line = list ( (vec) (vec) )
 ;; lines = list line line ...
 
-;;square
+;;carre
 to-report sqr [k]
   report k * k
 end
 
-;;absolute value squared
+;;longueur vector carree
 to-report abs_Sq [vec]
-  let ret multiply_vec vec vec
+  let ret multiply_vectors vec vec
   report ret
 end
 
-;;absolute value
+;;longueur vector
 to-report abs_ [vec]
   report sqrt ( abs_Sq vec )
 end
@@ -589,32 +660,27 @@ to-report det [ vec1 vec2 ]
 end
 
 ;;normalisation
-to-report normalize [ vec ]
-  report scale_vec vec ( 1 / abs_ vec )
+to-report normalize_vector [ vec ]
+  report scale_vector vec ( 1 / abs_ vec )
 end
 
 ;;multiplication
-to-report multiply_vec [ vec1 vec2 ]
+to-report multiply_vectors [ vec1 vec2 ]
   report ( item 0 vec1 ) * ( item 0 vec2 ) + ( item 1 vec1 ) * ( item 1 vec2 )
 end
 
 ;;scale
-to-report scale_vec [ vec k ]
+to-report scale_vector [ vec k ]
   report ( list (k * (item 0 vec )) (k * (item 1 vec )) )
 end
 
 ;;substraction
-to-report minus_vec [ vec1 vec2 ]
+to-report minus_vectors [ vec1 vec2 ]
   report list (( item 0 vec1 ) - ( item 0 vec2 ))  (( item 1 vec1 ) - ( item 1 vec2 ))
 end
 
-;;move
-to-report add_vec_val [ vec val ]
-  report ( list (val + (item 0 vec )) (val + (item 1 vec )) )
-end
-
 ;;addition
-to-report add_vec [ vec1 vec2]
+to-report add_vectors [ vec1 vec2]
   report list (( item 0 vec1 ) + ( item 0 vec2 ))  (( item 1 vec1 ) + ( item 1 vec2 ))
 end
 
@@ -629,14 +695,13 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;calculates optimal velocity associated with one orcaline
 to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
 
   let direction ( item 1 (item lineNo lines) )
   let point (item 0 (item lineNo lines) )
 
 
-  let dp  multiply_vec point direction
+  let dp  multiply_vectors point direction
 
   let discriminant ( sqr ( dp ) + sqr ( _radius ) - abs_Sq ( point ) )
 
@@ -657,17 +722,22 @@ to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
     ;;det(lines[lineNo].direction, lines[i].direction);
     let denominator ( det  direction  direction_i )
     ;;det(lines[i].direction, lines[lineNo].point - lines[i].point);
-    let numerator ( det ( direction_i ) ( minus_vec point point_i  ) )
+    let numerator ( det ( direction_i ) ( minus_vectors point point_i  ) )
 
-    if ( abs ( denominator ) <= 0.0000001 )
+    if ( abs ( denominator ) <= 0.000000001 )
     [
       ;;Lines lineNo and i are (almost) parallel.
-      if ( numerator < 0 )
+      ifelse ( numerator < 0 )
      [
        report false
       ]
+      [
+        ;;TODO:put foreach code in another fct to be able to add stop(<=> continue) and solve bug of divison by 0)
+      ]
     ]
 
+    print numerator
+    print denominator
     let t ( numerator / denominator )
 
     ifelse ( denominator >= 0 )
@@ -690,34 +760,34 @@ to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
   ifelse ( directionOpt )
   [
     ;;Optimize direction.
-    ifelse  ( multiply_vec  optVelocity  direction > 0  )
+    ifelse  ( multiply_vectors  optVelocity  direction > 0  )
     [
       ;;Take right extreme.
       ;;new_velocity = lines[lineNo].point + (tRight * lines[lineNo].direction;)
-      set new_velocity add_vec (scale_vec direction t_right ) (point)
+      set new_velocity add_vectors (scale_vector direction t_right ) (point)
     ]
     [
       ;;Take left extreme.
-      set new_velocity add_vec (scale_vec direction t_left ) (point)
+      set new_velocity add_vectors (scale_vector direction t_left ) (point)
     ]
   ]
   [
     ;;Optimize closest point
     ;;lines[lineNo].direction * (optVelocity - lines[lineNo].point);
-    let t multiply_vec (direction) (minus_vec optVelocity point)
+    let t multiply_vectors (direction) (minus_vectors optVelocity point)
 
     ifelse ( t < t_left)
     [
       ;;new_velocity = lines[lineNo].point + tLeft * lines[lineNo].direction;
-      set new_velocity add_vec (scale_vec direction t_left ) (point)
+      set new_velocity add_vectors (scale_vector direction t_left ) (point)
     ]
     [
      ifelse( t > t_right)
       [
-        set new_velocity add_vec (scale_vec direction t_right ) (point)
+        set new_velocity add_vectors (scale_vector direction t_right ) (point)
       ]
       [;;t=t_left=t_right
-        set new_velocity add_vec (scale_vec direction t_right ) (point)
+        set new_velocity add_vectors (scale_vector direction t_right ) (point)
       ];;end_ifelse
     ];;end_ifelse
   ];;end_ifelse
@@ -725,20 +795,68 @@ to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
 end
 
 
+to-report intemediaire1 [tl tr line direction point]
+  let t_left tl
+  let t_right tr
+  let direction_i ( item 1 line)
+  let point_i ( item 0 line)
+
+  ;;det(lines[lineNo].direction, lines[i].direction);
+  let denominator ( det  direction  direction_i )
+  ;;det(lines[i].direction, lines[lineNo].point - lines[i].point);
+  let numerator ( det ( direction_i ) ( minus_vectors point point_i  ) )
+
+  if ( abs ( denominator ) <= 0.000000001 )
+  [
+    ;;Lines lineNo and i are (almost) parallel.
+    ifelse ( numerator < 0 )
+    [
+      report list false 0
+    ]
+    [
+
+    ]
+  ]
+
+  print numerator
+  print denominator
+  let t ( numerator / denominator )
+
+  ifelse ( denominator >= 0 )
+  [
+    ;;Line i bounds line lineNo on the right.
+    set t_right ( min (list t_right t) )
+
+  ]
+  [
+    ;;Line i bounds line lineNo on the left.
+    set t_left ( max (list t_left t) )
+
+  ];;end_ifelse
+
+  if (t_left > t_right) [ report list false 0 ]
+
+  report (list (true) (t_left) (t_right))
+
+end
+
+
+
+
 to-report linearProgram2 [ lines _radius optVelocity directionOpt]
 
   ifelse ( directionOpt )
-  [set new_velocity scale_vec optVelocity _radius]
+  [set new_velocity scale_vector optVelocity _radius]
   [
     ifelse ( abs_Sq optVelocity > sqrt _radius)
-    [set new_velocity scale_vec normalize optVelocity _radius]
+    [set new_velocity scale_vector normalize_vector optVelocity _radius]
     [set new_velocity optVelocity]
   ]
 
   foreach (range length lines) [ lineNo ->
     let direction ( item 1 (item lineNo lines) )
     let point (item 0 (item lineNo lines) )
-    if (det direction minus_vec point new_velocity  > 0)
+    if (det direction minus_vectors point new_velocity  > 0)
     [
       ;;new_velocity does not satisfy constraint i. Compute new optimal new_velocity.
       let tmpnew_velocity new_velocity
@@ -765,7 +883,7 @@ to linearProgram3 [ lines numObstLines beginLine _radius]
    let point (item 0 (item lineNo lines) )
 
    ;;if (det(lines[i].direction, lines[i].point - new_velocity) > distance)
-   if ( (det (direction) (minus_vec (point) (new_velocity)) ) > dist )
+   if ( (det (direction) (minus_vectors (point) (new_velocity)) ) > dist )
    [
       ;;new_velocity does not satisfy constraint of line i.
       let projLines []
@@ -785,7 +903,7 @@ to linearProgram3 [ lines numObstLines beginLine _radius]
         ifelse  (abs determinant <= 0.0000001)
         [
           ;;Line i and line j are parallel.
-          ifelse( (multiply_vec direction direction_j) > 0)
+          ifelse( (multiply_vectors direction direction_j) > 0)
           [
             ;;Line i and line j point in the same direction.
             ;;continue
@@ -793,21 +911,21 @@ to linearProgram3 [ lines numObstLines beginLine _radius]
           [
             ;;Line i and line j point in opposite direction.
             ;;line.point = 0.5f * (lines[i].point + lines[j].point);
-            set line lput (scale_vec (add_vec point point_j) 0.5) line
+            set line lput (scale_vector (add_vectors point point_j) 0.5) line
           ];;end_ifelse
         ]
         [
           ;;line.point = lines[i].point + (det(lines[j].direction, lines[i].point - lines[j].point) / determinant) * lines[i].direction;
           ;; p = a + b
-          let m minus_vec point point_j
+          let m minus_vectors point point_j
           let d det direction_j m
-          let b scale_vec direction ( d / determinant )
-          let p add_vec point b
+          let b scale_vector direction ( d / determinant )
+          let p add_vectors point b
           set line lput p line
         ];;end_ifelse
 
 
-          set line lput ( normalize (minus_vec direction_j direction) ) line
+          set line lput ( normalize_vector (minus_vectors direction_j direction) ) line
           set projLines lput line projLines
 
       ] ;;end_foreach
@@ -819,42 +937,19 @@ to linearProgram3 [ lines numObstLines beginLine _radius]
       let lp2 linearProgram2 projLines _radius optVelocity_ true
       if (lp2 < length projLines) [set new_velocity tmpnew_velocity]
 
-    set dist (det (direction) (minus_vec point new_velocity))
+    set dist (det (direction) (minus_vectors point new_velocity))
     ]
 
   ]
 end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ;;============================================================================================================
 ;;============================================================================================================
 ;;============================================================================================================
 
+;; Ici nous avons commence a coder la triangulation de delaunay (duale de la partion de voronoi)
+;; pour permettre une autre approche a voronoi tesselation, nous n'avons pas le temps de finir càd
+;; imposer des contraintes pour des pattens non convex
 
 ;;https://stackoverflow.com/questions/39984709/how-can-i-check-wether-a-point-is-inside-the-circumcircle-of-3-points
 ;;https://www.wikiwand.com/en/Delaunay_triangulation
@@ -1019,15 +1114,15 @@ GRAPHICS-WINDOW
 1
 1
 0
-1
-1
+0
+0
 1
 -250
 250
 -250
 250
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -1041,7 +1136,7 @@ number_of_robots
 number_of_robots
 1
 150
-9.0
+114.0
 1
 1
 NIL
@@ -1065,10 +1160,10 @@ NIL
 1
 
 SLIDER
-1043
-110
-1215
-143
+1029
+111
+1201
+144
 pattern_percentage
 pattern_percentage
 0.01
@@ -1080,10 +1175,10 @@ NIL
 HORIZONTAL
 
 SWITCH
-1044
-153
-1188
-186
+1030
+154
+1174
+187
 show_particules
 show_particules
 1
@@ -1091,10 +1186,10 @@ show_particules
 -1000
 
 SWITCH
-1191
-153
-1334
-186
+1177
+154
+1320
+187
 show_partitions
 show_partitions
 1
@@ -1102,9 +1197,9 @@ show_partitions
 -1000
 
 MONITOR
-1042
+1028
 10
-1492
+1478
 55
 NIL
 patterns_colors
@@ -1113,9 +1208,9 @@ patterns_colors
 11
 
 MONITOR
-1042
+1028
 58
-1494
+1480
 103
 NIL
 patterns_weights
@@ -1124,40 +1219,40 @@ patterns_weights
 11
 
 SLIDER
-1045
-234
-1294
-267
+1030
+223
+1279
+256
 max_Voronoi_Tesselation_iterations
 max_Voronoi_Tesselation_iterations
 1
 35
-5.0
+1.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-1045
-274
-1295
-307
+1030
+263
+1280
+296
 tessellation_convergence_goal
 tessellation_convergence_goal
 0
 2
-0.8
+1.1
 0.05
 1
 NIL
 HORIZONTAL
 
 BUTTON
-29
-481
-92
-514
+1408
+458
+1471
+491
 NIL
 test
 NIL
@@ -1178,7 +1273,7 @@ CHOOSER
 defaul_pattern
 defaul_pattern
 "triangle" "rectangle" "circle" "ring" "stars" "2Lines" "gradientShapes" "falling_arrows" "flag" "flag1" "Google" "Stack_Overflow" "discord" "robot" "flame" "cyclops"
-5
+13
 
 BUTTON
 209
@@ -1213,7 +1308,7 @@ robot_size
 robot_size
 3
 30
-10.0
+6.0
 1
 1
 NIL
@@ -1237,15 +1332,15 @@ NIL
 1
 
 SLIDER
-24
+25
 389
 378
 422
 max_speed
 max_speed
 0
-50
-11.4
+10
+2.3
 0.1
 1
 NIL
@@ -1260,48 +1355,74 @@ collision_detection_range
 collision_detection_range
 5
 100
-100.0
+53.0
 1
 1
 NIL
 HORIZONTAL
 
 SWITCH
-1054
-407
-1188
-440
+1030
+354
+1243
+387
 show_velocity
 show_velocity
-0
+1
 1
 -1000
 
 SWITCH
-1053
-457
-1209
-490
+1251
+354
+1474
+387
 show_ORCA_lines
 show_ORCA_lines
-0
+1
 1
 -1000
 
 SLIDER
-1218
-456
-1390
-489
+1029
+398
+1474
+431
 line_width
 line_width
 1
 10
-1.0
-1
+3.0
+0.2
 1
 NIL
 HORIZONTAL
+
+SLIDER
+25
+473
+376
+506
+k_a_controller
+k_a_controller
+0.1
+20
+20.0
+0.1
+1
+NIL
+HORIZONTAL
+
+SWITCH
+1292
+458
+1404
+491
+show_grid
+show_grid
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
