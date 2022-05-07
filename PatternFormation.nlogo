@@ -80,8 +80,8 @@ to initContext ;;initialise le contexte de base
   set patterns_colors []
   set patterns_weights []
   set-default-shape particules "x"
-  set-default-shape robots "circle"
-  ;;set-default-shape robots "circle 3"
+  ;;set-default-shape robots "circle"
+  set-default-shape robots "circle 3"
 end
 
 to display_construction?
@@ -150,8 +150,8 @@ to generate_robots ;; genere des robots de façon a ne pas avoir des robots supe
   output-print "Generating Robots "
   output-print "Making sure they don't overlap... "
 
-  let pos ((robot_size * 1.5) / 2)
-  let n_slots floor (world-width / (robot_size * 1.5))
+  let pos ((robot_size) / 2)
+  let n_slots floor (world-width / (robot_size))
   let available_slots []
   ;;let available_slots_y ( range n_slots )
 
@@ -716,43 +716,17 @@ to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
   let t_right ( (- dp) + sqrtDiscriminant )
 
   foreach (range lineNo) [ i ->
-    let direction_i ( item 1 (item i lines) )
-    let point_i ( item 0 (item i lines) )
 
-    ;;det(lines[lineNo].direction, lines[i].direction);
-    let denominator ( det  direction  direction_i )
-    ;;det(lines[i].direction, lines[lineNo].point - lines[i].point);
-    let numerator ( det ( direction_i ) ( minus_vectors point point_i  ) )
+    let res (intermediaire1 t_left t_right (item i lines) direction point)
 
-    if ( abs ( denominator ) <= 0.000000001 )
+    ifelse(item 0 res)
     [
-      ;;Lines lineNo and i are (almost) parallel.
-      ifelse ( numerator < 0 )
-     [
-       report false
-      ]
-      [
-        ;;TODO:put foreach code in another fct to be able to add stop(<=> continue) and solve bug of divison by 0)
-      ]
-    ]
-
-    print numerator
-    print denominator
-    let t ( numerator / denominator )
-
-    ifelse ( denominator >= 0 )
-    [
-      ;;Line i bounds line lineNo on the right.
-     set t_right ( min (list t_right t) )
-
+      set t_left item 1 res
+      set t_right item 2 res
     ]
     [
-      ;;Line i bounds line lineNo on the left.
-      set t_left ( max (list t_left t) )
-
-    ];;end_ifelse
-
-    if (t_left > t_right) [ report false ]
+      if(item 1 res = 0) [report false]
+    ]
 
   ];;end_foreach
 
@@ -795,7 +769,7 @@ to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
 end
 
 
-to-report intemediaire1 [tl tr line direction point]
+to-report intermediaire1 [tl tr line direction point]
   let t_left tl
   let t_right tr
   let direction_i ( item 1 line)
@@ -818,8 +792,6 @@ to-report intemediaire1 [tl tr line direction point]
     ]
   ]
 
-  print numerator
-  print denominator
   let t ( numerator / denominator )
 
   ifelse ( denominator >= 0 )
@@ -1114,8 +1086,8 @@ GRAPHICS-WINDOW
 1
 1
 0
-0
-0
+1
+1
 1
 -250
 250
@@ -1136,7 +1108,7 @@ number_of_robots
 number_of_robots
 1
 150
-114.0
+97.0
 1
 1
 NIL
@@ -1227,7 +1199,7 @@ max_Voronoi_Tesselation_iterations
 max_Voronoi_Tesselation_iterations
 1
 35
-1.0
+24.0
 1
 1
 NIL
@@ -1242,7 +1214,7 @@ tessellation_convergence_goal
 tessellation_convergence_goal
 0
 2
-1.1
+0.7
 0.05
 1
 NIL
@@ -1273,7 +1245,7 @@ CHOOSER
 defaul_pattern
 defaul_pattern
 "triangle" "rectangle" "circle" "ring" "stars" "2Lines" "gradientShapes" "falling_arrows" "flag" "flag1" "Google" "Stack_Overflow" "discord" "robot" "flame" "cyclops"
-13
+11
 
 BUTTON
 209
@@ -1308,7 +1280,7 @@ robot_size
 robot_size
 3
 30
-6.0
+8.0
 1
 1
 NIL
@@ -1355,7 +1327,7 @@ collision_detection_range
 collision_detection_range
 5
 100
-53.0
+33.0
 1
 1
 NIL
@@ -1420,7 +1392,7 @@ SWITCH
 491
 show_grid
 show_grid
-0
+1
 1
 -1000
 
