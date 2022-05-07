@@ -188,47 +188,6 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-to calculate_new_vel
-  set pref_velocity scale_vec normalize (list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)) (0.9 * max_speed)
-  ;;set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
-  set collision_neighbors other robots in-radius collision_detection_range
-  compute_new_velocity_ORCA
-end
-
-
-to move_to_goal
-  set velocity new_velocity
-  setxy (xcor + item 0 velocity) (ycor + item 1 velocity)
-end
-
-
-
-
-to-report add_vectors [ vec1 vec2 ]
-  report list (( item 0 vec1 ) + ( item 0 vec2 ))  (( item 1 vec1 ) + ( item 1 vec2 ))
-end
-
-to-report vector_len [vec]
-  report sqrt ( ( item 0 vec ) * ( item 0 vec ) + ( item 1 vec ) * ( item 1 vec ) )
-end
-
-to-report normalize_vector [vec]
-  let len vector_len vec
-  report scale_vector vec ( 1 / len )
-end
-
-to-report scale_vector [vec k]
-  report list ( k * (item 0 vec )) ( k * (item 1 vec ))
-end
-
-to-report min_len_vec [vec1 vec2]
-  let len1 vector_len vec1
-  let len2 vector_len vec2
-  ifelse(len1 < len2)
-  [report vec1]
-  [report vec2]
-end
-
 
 
 
@@ -399,10 +358,42 @@ to generateGoals
   reset-ticks
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;██████   ██████  ██████   ██████  ████████ ███████
+;;██   ██ ██    ██ ██   ██ ██    ██    ██    ██
+;;██████  ██    ██ ██████  ██    ██    ██    ███████
+;;██   ██ ██    ██ ██   ██ ██    ██    ██         ██
+;;██   ██  ██████  ██████   ██████     ██    ███████
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+to calculate_new_vel
+  set pref_velocity scale_vec normalize (list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)) (0.9 * max_speed)
+  ;;set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
+  set collision_neighbors other robots in-radius collision_detection_range
+  compute_new_velocity_ORCA
+end
+
+
+to move_to_goal
+  set velocity new_velocity
+  setxy (xcor + item 0 velocity) (ycor + item 1 velocity)
+end
 
 
 
-;;ROBOTS
+;;Note:
+;;     Ayant trouvé l'application mathématique du sujet compliqué partie ORCA nous nous sommes aidé
+;;     de l'implémentation déjà existante du problème présenté en [18]
+;;     - J. van den Berg, S. J. Guy, M. Lin and D. Manocha, ”Reciprocal nbody Collision Avoidance”, in Int. Symp. on Robotics Research, 2009. -
+;;     se trouvant dans
+;;     https://github.com/snape/RVO2
+;;
+;;
+;;     Nous ne prétendons pas être être à l'origine de cette implémentation, nous servi du code existant et nous l'avons adapté a notre problème et le langage netlogo
+
 
 to compute_new_velocity_ORCA
   set orca_lines []
@@ -414,7 +405,6 @@ to compute_new_velocity_ORCA
   ]
 
   foreach (collision_neighbors_id) [ agent_B_id ->
-  ;;let agent_B item i collision_neighbors
 
     let relativePosition list ( [xcor] of (robot agent_B_id) - xcor) ([ycor] of (robot agent_B_id) - ycor)
 
@@ -422,7 +412,7 @@ to compute_new_velocity_ORCA
 
     let distSq abs_Sq relativePosition
 
-    let combinedRadius robot_size
+    let combinedRadius robot_size + 2
 
     let combinedRadiusSq sqr combinedRadius
 
@@ -432,7 +422,8 @@ to compute_new_velocity_ORCA
 
     ifelse (distSq > combinedRadiusSq)
     [
-      ;;No collision.
+      ;;No collison
+      ;;Agents are not touching one another
       let w (minus_vec (relativeVelocity) (relativePosition))
 
       let wLengthSq abs_Sq w
@@ -503,11 +494,12 @@ to compute_new_velocity_ORCA
     linearProgram3 orca_lines 0 lineFail max_speed
   ]
 
+end
 
-
-
-  if (show_Orca_Lines)
+to show_guideLines
+    if (show_Orca_Lines)
   [
+    let col 0
     foreach (orca_lines) [line ->
 
       let point item 0 line
@@ -522,27 +514,15 @@ to compute_new_velocity_ORCA
           setxy (xcor + (item 0 point)) (ycor + (item 1 point))
           set lnk_id i
           set size 0
+          set col col + 5
+          set color col
           pen-down
           let k 0
           let vtt normalize list (xcor + (item 0 direction)) (ycor +(item 1 direction))
-          setxy (xcor + (item 0 vtt) * (100)) (ycor + (item 1 vtt) * (100))
-          setxy (xcor + (item 0 vtt) * (- 200 )) (ycor + (item 1 vtt) * (- 200 ))
+          setxy (xcor + (item 0 vtt) * (robot_size * 2 )) (ycor + (item 1 vtt) * (robot_size * 2))
+          setxy (xcor + (item 0 vtt) * (- (robot_size * 4) )) (ycor + (item 1 vtt) * (- (robot_size * 4) ))
         ]
       ]
-        ;;sprout-lnks 1 [
-          ;;let vtt scale_vec normalize list (xcor + (item 0 direction)) (ycor +(item 1 direction)) (world-width)
-          ;;setxy (xcor +(item 0 direction) * world-width) (ycor +(item 1 direction) * world-width)
-          ;;setxy ((item 0 vtt))  ((item 1 vtt))
-          ;;set lnk_id j
-          ;;set size 0
-        ;;]
-      ;;]
-
-      ;;ask lnks with [ lnk_id = i ] [create-red-link-to one-of lnks with [ lnk_id = j ] [
-        ;;set color red
-        ;;set thickness line_width + 0.5
-        ;;]
-      ;;]
     ];;end_foreach
   ];;end_if
 
@@ -555,9 +535,7 @@ to compute_new_velocity_ORCA
         set lnk_id_cnt lnk_id_cnt + 1
         set size 0
         set lnk_id lnk_id_cnt
-        let vtt list (xcor + (item 0 velocity_vector) ) (ycor + (item 1 velocity_vector) )
-        setxy (item 0 vtt) (item 1 vtt)
-        ;;setxy  (xcor + (item 0 velocity_vector) * scale_factor) (ycor + (item 1 velocity_vector) * scale_factor)
+        setxy (xcor + (item 0 velocity_vector)) (ycor + (item 1 velocity_vector))
       ]
     ]
     create-red-link-to one-of lnks with [ lnk_id = i ] [
@@ -565,66 +543,91 @@ to compute_new_velocity_ORCA
       set thickness line_width
     ]
   ]
-
-
 end
 
 
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;██    ██ ███████  ██████ ████████  ██████  ██████       ██████  ██████  ███████ ██████   █████  ████████ ██  ██████  ███    ██ ███████
+;;██    ██ ██      ██         ██    ██    ██ ██   ██     ██    ██ ██   ██ ██      ██   ██ ██   ██    ██    ██ ██    ██ ████   ██ ██
+;;██    ██ █████   ██         ██    ██    ██ ██████      ██    ██ ██████  █████   ██████  ███████    ██    ██ ██    ██ ██ ██  ██ ███████
+;; ██  ██  ██      ██         ██    ██    ██ ██   ██     ██    ██ ██      ██      ██   ██ ██   ██    ██    ██ ██    ██ ██  ██ ██      ██
+;;  ████   ███████  ██████    ██     ██████  ██   ██      ██████  ██      ███████ ██   ██ ██   ██    ██    ██  ██████  ██   ████ ███████
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-
-;;UTILS;;
 ;; vec = list (x y)
-;; line = list ( (vec1) (vec2) )
-;; line = list line line ...
+;; line = list ( (vec) (vec) )
+;; lines = list line line ...
 
-;;calcule le carre
+;;square
 to-report sqr [k]
   report k * k
 end
 
-
+;;absolute value squared
 to-report abs_Sq [vec]
   let ret multiply_vec vec vec
   report ret
 end
 
+;;absolute value
 to-report abs_ [vec]
   report sqrt ( abs_Sq vec )
 end
 
+;;determinant
 to-report det [ vec1 vec2 ]
   let ret ( (item 0 vec1) * (item 1 vec2 ) - (item 1 vec1 ) * (item 0 vec2 ) )
   report ret
 end
 
+;;normalisation
 to-report normalize [ vec ]
   report scale_vec vec ( 1 / abs_ vec )
 end
 
+;;multiplication
 to-report multiply_vec [ vec1 vec2 ]
   report ( item 0 vec1 ) * ( item 0 vec2 ) + ( item 1 vec1 ) * ( item 1 vec2 )
 end
 
+;;scale
 to-report scale_vec [ vec k ]
   report ( list (k * (item 0 vec )) (k * (item 1 vec )) )
 end
 
+;;substraction
 to-report minus_vec [ vec1 vec2 ]
   report list (( item 0 vec1 ) - ( item 0 vec2 ))  (( item 1 vec1 ) - ( item 1 vec2 ))
 end
 
+;;move
 to-report add_vec_val [ vec val ]
   report ( list (val + (item 0 vec )) (val + (item 1 vec )) )
 end
 
+;;addition
 to-report add_vec [ vec1 vec2]
   report list (( item 0 vec1 ) + ( item 0 vec2 ))  (( item 1 vec1 ) + ( item 1 vec2 ))
 end
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;██      ██ ███    ██ ███████  █████  ██████      ██████  ██████   ██████   ██████  ██████   █████  ███    ███
+;;██      ██ ████   ██ ██      ██   ██ ██   ██     ██   ██ ██   ██ ██    ██ ██       ██   ██ ██   ██ ████  ████
+;;██      ██ ██ ██  ██ █████   ███████ ██████      ██████  ██████  ██    ██ ██   ███ ██████  ███████ ██ ████ ██
+;;██      ██ ██  ██ ██ ██      ██   ██ ██   ██     ██      ██   ██ ██    ██ ██    ██ ██   ██ ██   ██ ██  ██  ██
+;;███████ ██ ██   ████ ███████ ██   ██ ██   ██     ██      ██   ██  ██████   ██████  ██   ██ ██   ██ ██      ██
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;calculates optimal velocity associated with one orcaline
 to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
 
   let direction ( item 1 (item lineNo lines) )
@@ -1021,8 +1024,8 @@ GRAPHICS-WINDOW
 250
 -250
 250
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -1036,7 +1039,7 @@ number_of_robots
 number_of_robots
 1
 150
-10.0
+9.0
 1
 1
 NIL
@@ -1208,7 +1211,7 @@ robot_size
 robot_size
 3
 30
-30.0
+10.0
 1
 1
 NIL
@@ -1271,21 +1274,6 @@ show_velocity
 0
 1
 -1000
-
-SLIDER
-1195
-407
-1367
-440
-scale_factor
-scale_factor
-1
-10
-1.0
-0.5
-1
-NIL
-HORIZONTAL
 
 SWITCH
 1053
