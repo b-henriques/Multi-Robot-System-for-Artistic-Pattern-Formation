@@ -201,8 +201,12 @@ end
 
 
 to move_to_goal
+  ;;let ran patches in-radius 50
+  ;;ask ran [set pcolor ticks]
   set velocity new_velocity
   setxy (xcor + item 0 velocity) (ycor + item 1 velocity)
+
+
 end
 
 to move
