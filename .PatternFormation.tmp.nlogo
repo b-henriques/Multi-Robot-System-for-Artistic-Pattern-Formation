@@ -4,7 +4,7 @@ globals
   patterns_colors       ;; id/color defining a pattern
   patterns_weights      ;; ratio of pattern among all patterns
 
-  vec_n
+  lnk_id_cnt
 ]
 
 patches-own
@@ -38,11 +38,11 @@ robots-own
 
 ;; every link breed must be declared as either directed or undirected
 directed-link-breed [red-links red-link]
-breed [vects vvv]
+breed [lnks lnk]
 
-vects-own
+lnks-own
 [
-vec_id
+lnk_id
 ]
 
 
@@ -139,6 +139,8 @@ to create_robot
 end
 
 to generate_robots
+  output-print "Generating Robots "
+  output-print "Making sure they don't overlap... "
   let n_robots_spawned 0
   ask patches [
     if ( not any? robots in-radius (robot_size) and n_robots_spawned < (number_of_robots))
@@ -160,22 +162,16 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+  set lnk_id_cnt 0
+  clear-drawing
+  ask-concurrent lnks [
+    die
+  ]
   tick-advance 1
   ask robots [ calculate_new_vel ]
   ask robots [ move_to_goal ]
 end
 
-to move_o
-  ask robots [ compute_new_velocity ]
-  ask robots [ move ]
-  ask red-links [die]
-end
-
-to goV2
-  ask robots [ compute_new_velocity ]
-  ;;ask robots [ move ]
-  ;;ask red-links [die]
-end
 
 
 
@@ -201,95 +197,10 @@ end
 
 
 to move_to_goal
-  ;;let ran patches in-radius 50
-  ;;ask ran [set pcolor ticks]
   set velocity new_velocity
   setxy (xcor + item 0 velocity) (ycor + item 1 velocity)
-
-
 end
 
-to move
-  setxy (xcor + item 0 new_velocity) (ycor + item 1 new_velocity)
-end
-
-to compute_new_velocity
-
-  set repulsive []
-  set attraction list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
-  ;;set new_velocity (scale_vector normalize_vector attraction 10)
-  set new_velocity attraction
-
-  ;;LINK new velocity
-  let i vec_n + 1
-  let ddd new_velocity
-  ask patch-here [
-    sprout-vects 1 [
-      set vec_n vec_n + 1
-    set size 0
-    set vec_id vec_n
-    setxy  (xcor + item 0 ddd) (ycor + item 1 ddd)
-  ]
-  ]
-  create-red-link-to one-of vects with [ vec_id = i ] [set color 0 ]
-
-
-
-  set collision_neighbors other robots in-radius collision_detection_range
-  ask collision_neighbors [ calculate_repulsive_force myself ]
-
-  foreach (repulsive)  [ rf ->
-    set new_velocity add_vectors new_velocity rf
-  ]
-
-
-  let new_velocity_max_speed (scale_vector normalize_vector new_velocity max_speed)
-  ;;set new_velocity new_velocity_max_speed
-  set new_velocity min_len_vec new_velocity new_velocity_max_speed
-
-
-  ;;LINK new velocity
-  set i vec_n + 1
-  let dd new_velocity
-  ask patch-here [
-    sprout-vects 1 [
-      set vec_n vec_n + 1
-    set size 0
-    set vec_id vec_n
-    setxy  (xcor + item 0 dd) (ycor + item 1 dd)
-  ]
-  ]
-  create-red-link-to one-of vects with [ vec_id = i ] [set color green]
-
-end
-
-
-
-to calculate_repulsive_force [ agent_B ]
-
-  let repulsive_force list ( factor * ( [xcor] of agent_B - xcor )) ( factor * (  [ycor] of agent_B - ycor) )
-  set repulsive_force (scale_vector normalize_vector repulsive_force ( robot_size / 2 ) )
-  let slide_force list (- item 1 repulsive_force) (item 0 repulsive_force)
-  set slide_force (scale_vector normalize_vector slide_force ( robot_size ) )
-
-  let i vec_n + 1
-    ask patch-here [
-      sprout-vects 1 [
-        set vec_n vec_n + 1
-        set size 0
-        set vec_id vec_n
-        setxy  (xcor + item 0 repulsive_force) (ycor + item 1 repulsive_force)
-      ]
-    ]
-  create-red-link-to one-of vects with [ vec_id = i ] [set color red ]
-
-
-  ask agent_B [
-    set repulsive lput repulsive_force repulsive
-    set repulsive lput slide_force repulsive
-
-  ]
-end
 
 
 
@@ -591,6 +502,70 @@ to compute_new_velocity_ORCA
   [
     linearProgram3 orca_lines 0 lineFail max_speed
   ]
+
+
+
+
+  if (show_Orca_Lines)
+  [
+    foreach (orca_lines) [line ->
+
+      let point item 0 line
+      let direction item 1 line
+
+      let i lnk_id_cnt + 1
+      let j lnk_id_cnt + 2
+      set lnk_id_cnt lnk_id_cnt + 2
+
+      ask patch-here [
+        sprout-lnks 1 [
+          setxy (xcor + (item 0 point)) (ycor + (item 1 point))
+          set lnk_id i
+          set size 0
+          pen-down
+          let k 0
+          let vtt normalize list (xcor + (item 0 direction)) (ycor +(item 1 direction))
+          setxy (xcor + (item 0 vtt) * (100)) (ycor + (item 1 vtt) * (100))
+          setxy (xcor + (item 0 vtt) * (- 200 )) (ycor + (item 1 vtt) * (- 200 ))
+        ]
+      ]
+        ;;sprout-lnks 1 [
+          ;;let vtt scale_vec normalize list (xcor + (item 0 direction)) (ycor +(item 1 direction)) (world-width)
+          ;;setxy (xcor +(item 0 direction) * world-width) (ycor +(item 1 direction) * world-width)
+          ;;setxy ((item 0 vtt))  ((item 1 vtt))
+          ;;set lnk_id j
+          ;;set size 0
+        ;;]
+      ;;]
+
+      ;;ask lnks with [ lnk_id = i ] [create-red-link-to one-of lnks with [ lnk_id = j ] [
+        ;;set color red
+        ;;set thickness line_width + 0.5
+        ;;]
+      ;;]
+    ];;end_foreach
+  ];;end_if
+
+  if (show_velocity)
+  [
+    let velocity_vector new_velocity
+    let i lnk_id_cnt + 1
+    ask patch-here [
+      sprout-lnks 1 [
+        set lnk_id_cnt lnk_id_cnt + 1
+        set size 0
+        set lnk_id lnk_id_cnt
+        let vtt list (xcor + (item 0 velocity_vector) ) (ycor + (item 1 velocity_vector) )
+        setxy (item 0 vtt) (item 1 vtt)
+        ;;setxy  (xcor + (item 0 velocity_vector) * scale_factor) (ycor + (item 1 velocity_vector) * scale_factor)
+      ]
+    ]
+    create-red-link-to one-of lnks with [ lnk_id = i ] [
+      set color green
+      set thickness line_width
+    ]
+  ]
+
 
 end
 
@@ -1061,7 +1036,7 @@ number_of_robots
 number_of_robots
 1
 150
-20.0
+10.0
 1
 1
 NIL
@@ -1174,10 +1149,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-32
-314
-95
-347
+29
+481
+92
+514
 NIL
 test
 NIL
@@ -1227,23 +1202,23 @@ OUTPUT
 SLIDER
 34
 34
-206
+389
 67
 robot_size
 robot_size
 3
-20
-20.0
+30
+30.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
-106
-314
-169
-347
+33
+300
+384
+333
 NIL
 go
 T
@@ -1259,13 +1234,13 @@ NIL
 SLIDER
 24
 389
-196
+378
 422
 max_speed
 max_speed
 0
-10
-3.6
+50
+11.4
 0.1
 1
 NIL
@@ -1273,9 +1248,9 @@ HORIZONTAL
 
 SLIDER
 25
-432
-214
-465
+430
+376
+463
 collision_detection_range
 collision_detection_range
 5
@@ -1286,54 +1261,57 @@ collision_detection_range
 NIL
 HORIZONTAL
 
-SLIDER
-229
-390
-401
-423
-factor
-factor
-0.1
+SWITCH
+1054
+407
+1188
+440
+show_velocity
+show_velocity
+0
 1
+-1000
+
+SLIDER
+1195
+407
+1367
+440
+scale_factor
+scale_factor
+1
+10
 1.0
-0.1
+0.5
 1
 NIL
 HORIZONTAL
 
-BUTTON
-1169
-374
-1244
-407
-NIL
-move_o
-T
+SWITCH
+1053
+457
+1209
+490
+show_ORCA_lines
+show_ORCA_lines
+0
 1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
+-1000
 
-BUTTON
-1099
-375
-1162
-408
-NIL
-goV2
-NIL
+SLIDER
+1218
+456
+1390
+489
+line_width
+line_width
 1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
+10
+1.0
 1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
