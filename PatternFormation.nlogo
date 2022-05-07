@@ -3,12 +3,16 @@ globals
   ;;PATTERNS;;
   patterns_colors       ;; id/color defining a pattern
   patterns_weights      ;; ratio of pattern among all patterns
+
+  vec_n
+  radius
 ]
 patches-own
 [
   patch_pattern         ;; pattern id/color associated whit this patch
   patch_partition       ;; partition associated with this patch
 ]
+
 breed [particules particule]
 breed [robots robot]
 particules-own
@@ -18,8 +22,26 @@ particules-own
 ]
 robots-own
 [
-  max_speed
+  velocity
+  pref_velocity
+  new_velocity
+  orca_lines
+  collision_neighbors
+  repulsive
+  attraction
+
 ]
+;; every link breed must be declared as either directed or undirected
+directed-link-breed [red-links red-link]
+breed [vects vvv]
+
+vects-own
+[
+vec_id
+]
+
+
+
 ;; import pattern
 ;; gen points a l'interieur de pattern
 ;; voronoi partitions
@@ -103,11 +125,25 @@ to create_robot
   sprout-robots 1 [
     set size robot_size
     set color [color] of (particule (who - number_of_robots ))
+    set velocity list (random 2 - random 4) (random 2 - random 4)
+    set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
+    set new_velocity list 0 0
+    set repulsive []
+
   ]
 end
 
 to generate_robots
-  ask n-of number_of_robots patches [create_robot]
+  let n_robots_spawned 0
+  ask patches [
+    if ( not any? robots in-radius (robot_size) and n_robots_spawned < (number_of_robots))
+    [
+      set n_robots_spawned (n_robots_spawned + 1)
+      create_robot
+    ]
+  ]
+  ;;ask n-of number_of_robots (patches with [ (not any? (robots in-radius (robot_size + 1)))]) [create_robot]
+  ;;ask patches with [ (not any? (robots in-radius (robot_size + 1)))] [set pcolor green]
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -121,7 +157,28 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+  tick-advance 1
+  ;;output-print "===================================="
+  ;;ask robots [
+    ;;output-print "pos1"
+    ;;output-print list xcor ycor
+   ;;output-print "rr"
+   ;;output-print repulsive
+    ;;compute_new_velocity
+    ;;output-print "XX"
+    ;;output-print repulsive
+    ;;output-print "pos2"
+    ;;output-print list (xcor + item 0 new_velocity) (ycor + item 1 new_velocity)
+  ;;]
+  ;;ask robots [ move ]
+  ;;ask red-links [die]
+  ask robots [ calculate_new_vel ]
   ask robots [ move_to_goal ]
+end
+
+to move_o
+  ask robots [ move ]
+  ask red-links [die]
 end
 
 
@@ -139,10 +196,146 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-to move_to_goal
-  face ( particule (who - number_of_robots ) )
-  fd 0.01
+to calculate_new_vel
+  set pref_velocity list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
+  set collision_neighbors other robots in-radius 50
+  calculate_new_velocity
 end
+
+
+to move_to_goal
+  ;;let ran patches in-radius 50
+  ;;ask ran [set pcolor ticks]
+  set velocity new_velocity
+  setxy (xcor + item 0 velocity) (ycor + item 1 velocity)
+
+  ;;face ( particule (who - number_of_robots ) )
+  ;;fd 0.01
+end
+to move
+  setxy (xcor + item 0 new_velocity) (ycor + item 1 new_velocity)
+end
+
+to compute_new_velocity
+
+  ;;set color 0
+  set repulsive []
+  print "======================================================"
+  print "======================================================"
+  print "My coords"
+  print list xcor ycor
+  set attraction list ([xcor] of particule (who - number_of_robots ) - xcor) ([ycor] of particule (who - number_of_robots ) - ycor)
+  set new_velocity (scale_vector normalize_vector attraction max_speed)
+
+  ;;LINK new velocity
+  let i vec_n + 1
+  let ddd new_velocity
+  ask patch-here [
+    sprout-vects 1 [
+      set vec_n vec_n + 1
+    set size 0
+    set vec_id vec_n
+    setxy  (xcor + item 0 ddd) (ycor + item 1 ddd)
+  ]
+  ]
+  create-red-link-to one-of vects with [ vec_id = i ] [set color 0 ]
+
+
+
+  set collision_neighbors other robots in-radius collision_detection_range
+  ask collision_neighbors [ calculate_repulsive_force myself ]
+
+ print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+ print new_velocity
+ print repulsive
+
+  foreach (repulsive)  [ rf ->
+    ;;print "ch"
+    ;;print new_velocity
+    set new_velocity add_vectors new_velocity rf
+    ;;print rf
+    ;;print new_velocity
+  ]
+
+
+  let new_velocity_max_speed (scale_vector normalize_vector new_velocity max_speed)
+  ;;set new_velocity new_velocity_max_speed
+  set new_velocity min_len_vec new_velocity new_velocity_max_speed
+
+
+  ;;LINK new velocity
+  set i vec_n + 1
+  let dd new_velocity
+  ask patch-here [
+    sprout-vects 1 [
+      set vec_n vec_n + 1
+    set size 0
+    set vec_id vec_n
+    setxy  (xcor + item 0 dd) (ycor + item 1 dd)
+  ]
+  ]
+  create-red-link-to one-of vects with [ vec_id = i ] [set color green]
+
+  print new_velocity
+
+end
+
+
+
+to calculate_repulsive_force [ agent_B ]
+  ;;set color green
+  ;;print "N coords"
+  ;;print list xcor ycor
+  let repulsive_force list ( factor * ( [xcor] of agent_B - xcor )) ( factor * (  [ycor] of agent_B - ycor) )
+  set repulsive_force (scale_vector normalize_vector repulsive_force ( 1 ) )
+
+  print "DDDDDDDDDD"
+  print repulsive_force
+  print list xcor ycor
+  print xcor + item 0 repulsive_force
+  let i vec_n + 1
+    ask patch-here [
+      sprout-vects 1 [
+        set vec_n vec_n + 1
+        set size 0
+        set vec_id vec_n
+        setxy  (xcor + item 0 repulsive_force) (ycor + item 1 repulsive_force)
+      ]
+    ]
+  create-red-link-to one-of vects with [ vec_id = i ] [set color red ]
+  ask agent_B [
+    set repulsive lput repulsive_force repulsive ]
+end
+
+
+
+to-report add_vectors [ vec1 vec2 ]
+  report list (( item 0 vec1 ) + ( item 0 vec2 ))  (( item 1 vec1 ) + ( item 1 vec2 ))
+end
+
+to-report vector_len [vec]
+  report sqrt ( ( item 0 vec ) * ( item 0 vec ) + ( item 1 vec ) * ( item 1 vec ) )
+end
+
+to-report normalize_vector [vec]
+  let len vector_len vec
+  report scale_vector vec ( 1 / len )
+end
+
+to-report scale_vector [vec k]
+  report list ( k * (item 0 vec )) ( k * (item 1 vec ))
+end
+
+to-report min_len_vec [vec1 vec2]
+  let len1 vector_len vec1
+  let len2 vector_len vec2
+  ifelse(len1 < len2)
+  [report vec1]
+  [report vec2]
+end
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -158,7 +351,7 @@ end
 ;;  - pattern_color
 ;;  - partitions
 to importPatterns
-  ask patches [
+  ask-concurrent patches [
     set pcolor white
   ]
   ;; import image and paint patches
@@ -192,7 +385,7 @@ to createPatterns
       set patterns_weights replace-item pattern_index patterns_weights ( item pattern_index patterns_weights + 1 )
     ]
   ]
-  ;; output from import-pcolors file has some noise so we clean the results
+  ;; output from import-pcolors file has some noise so we clean the new_velocitys
   ;; drop 'fake patterns': from last index to 0 at -1 pace
   foreach (range (length patterns_weights - 1) -1 -1) [ x -> drop_pattern x pattern_percentage ]
   ;;update ratio
@@ -310,6 +503,396 @@ to generateGoals
   voronoi_tesselation
   reset-ticks
 end
+
+
+
+
+;;ROBOTS
+
+to calculate_new_velocity
+  set orca_lines []
+
+  let invTimeStep  (1 / time_step)
+
+  let collision_neighbors_id []
+
+  ask collision_neighbors[
+    set collision_neighbors_id lput who collision_neighbors_id
+  ]
+
+  foreach (collision_neighbors_id) [ agent_B_id ->
+  ;;let agent_B item i collision_neighbors
+
+    let relativePosition list ( [xcor] of (robot agent_B_id) - xcor) ([ycor] of (robot agent_B_id) - ycor)
+
+    let relativeVelocity (minus_vec (velocity) ([velocity] of (robot agent_B_id)))
+
+    let distSq abs_Sq relativePosition
+
+    let combinedRadius robot_size
+
+    let combinedRadiusSq sqrt combinedRadius
+
+    let line list 0 0
+    let u list 0 0
+
+
+    ifelse (distSq > combinedRadiusSq)
+    [
+      ;;No collision.
+      let w (minus_vec (relativeVelocity) (scale_vec relativePosition invTimeStep))
+
+      let wLengthSq abs_Sq w
+
+      let dp1 multiply_vec w relativePosition
+
+      ifelse(dp1 < 0 and sqr dp1 > (combinedRadiusSq * wLengthSq) )
+      [
+        let wLength sqrt wLengthSq
+        let unitW scale_vec w ( 1 / wLength )
+
+        ;;line.direction = Vector2(unitW.y(), -unitW.x());
+        set line replace-item 1 line list ( item 1 unitW ) (- item 0 unitW )
+        set u scale_vec unitW (combinedRadius * invTimeStep - wLength)
+
+      ]
+      [
+        let leg sqrt (distSq - combinedRadius)
+
+        ifelse(det relativePosition w > 0)
+        [
+          ;;line.direction = Vector2(relativePosition.x() * leg - relativePosition.y() * combinedRadius, relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
+          let d_x item 0 relativePosition * leg - item 1 relativePosition * combinedRadius
+          let d_y item 0 relativePosition * combinedRadius + item 1 relativePosition * leg
+
+          set line replace-item 1 line (scale_vec (list (d_x) (d_y)) (1 / distSq))
+        ]
+        [
+          ;;line.direction = -Vector2(relativePosition.x() * leg + relativePosition.y() * combinedRadius, -relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
+          let d_x item 0 relativePosition * leg + item 1 relativePosition * combinedRadius
+          let d_y  (- (item 0 relativePosition)) * combinedRadius + item 1 relativePosition * leg
+
+          set line replace-item 1 line scale_vec (list (d_x) (d_y)) (- 1 / distSq)
+        ];;end_ifelse
+
+        ;;dotProduct2 = relativeVelocity * line.direction;
+        let dp2 multiply_vec relativeVelocity item 1 line
+
+        set u minus_vec (scale_vec item 1 line dp2) (relativeVelocity)
+      ];;end_ifelse
+    ];;end_ifelse
+    [
+      ;;Collision. Project on cut-off circle of time timeStep.
+      ;;const float invTimeStep = 1.0f / sim_->timeStep_;
+      let w (minus_vec (relativePosition) (scale_vec relativePosition invTimeStep))
+
+      ;;normalisation?
+      let wLenght abs_ w
+      let unitW scale_vec w (1 / wLenght)
+
+      ;;line.direction = Vector2(unitW.y(), -unitW.x());
+      set line replace-item 1 line list (item 1 unitW) (- (item 0 unitW))
+
+      set u (scale_vec (unitW) (combinedRadius * invTimeStep - wLenght))
+    ]
+
+    ;;line.point = velocity_ + 0.5f * u;
+    set line replace-item 0 line (add_vec (velocity) (scale_vec u 0.5))
+    set orca_lines lput line orca_lines
+
+  ];;end_foreach
+
+let lineFail linearProgram2 orca_lines max_speed pref_velocity false
+
+if ( lineFail < length orca_lines )
+[
+  linearProgram3 orca_lines 0 lineFail max_speed
+]
+
+
+end
+
+
+
+
+
+
+
+
+;;UTILS;;
+;; vec = list (x y)
+;; line = list ( (vec1) (vec2) )
+;; line = list line line ...
+
+;;calcule le carre
+to-report sqr [k]
+  report k * k
+end
+
+
+to-report abs_Sq [vec]
+  let ret multiply_vec vec vec
+  report ret
+end
+
+to-report abs_ [vec]
+  report sqrt ( abs_Sq vec )
+end
+
+to-report det [ vec1 vec2 ]
+  let ret ( (item 0 vec1) * (item 1 vec2 ) - (item 1 vec1 ) * (item 0 vec2 ) )
+  report ret
+end
+
+to-report normalize [ vec ]
+  report scale_vec vec ( 1 / abs_ vec )
+end
+
+to-report multiply_vec [ vec1 vec2 ]
+  report ( item 0 vec1 ) * ( item 0 vec2 ) + ( item 1 vec1 ) * ( item 1 vec2 )
+end
+
+to-report scale_vec [ vec k ]
+  report ( list (k * (item 0 vec )) (k * (item 1 vec )) )
+end
+
+to-report minus_vec [ vec1 vec2 ]
+  report list (( item 0 vec1 ) - ( item 0 vec2 ))  (( item 1 vec1 ) - ( item 1 vec2 ))
+end
+
+to-report add_vec_val [ vec val ]
+  report ( list (val + (item 0 vec )) (val + (item 1 vec )) )
+end
+
+to-report add_vec [ vec1 vec2]
+  report list (( item 0 vec1 ) + ( item 0 vec2 ))  (( item 1 vec1 ) + ( item 1 vec2 ))
+end
+
+to-report linearProgram1 [ lines lineNo _radius optVelocity directionOpt ]
+
+  let direction ( item 1 (item lineNo lines) )
+  let point (item 0 (item lineNo lines) )
+
+
+  let dp  multiply_vec point direction
+
+  let discriminant ( sqr ( dp ) + sqr ( _radius ) - abs_Sq ( point ) )
+
+  if ( discriminant < 0 )
+  [
+    ;;Max speed circle fully invalidates line lineNo.
+    report false
+  ]
+
+  let sqrtDiscriminant sqrt discriminant
+  let t_left ( (- dp) - sqrtDiscriminant )
+  let t_right ( (- dp) + sqrtDiscriminant )
+
+  foreach (range lineNo) [ i ->
+    let direction_i ( item 1 (item i lines) )
+    let point_i ( item 0 (item i lines) )
+
+    ;;det(lines[lineNo].direction, lines[i].direction);
+    let denominator ( det  direction  direction_i )
+    ;;det(lines[i].direction, lines[lineNo].point - lines[i].point);
+    let numerator ( det ( direction_i ) ( minus_vec point point_i  ) )
+
+    if ( abs ( denominator ) <= 0.0000001 )
+    [
+      ;;Lines lineNo and i are (almost) parallel.
+      if ( numerator < 0 )
+     [
+       report false
+      ]
+    ]
+
+    let t ( numerator / denominator )
+
+    ifelse ( denominator >= 0 )
+    [
+      ;;Line i bounds line lineNo on the right.
+     set t_right ( min (list t_right t) )
+
+    ]
+    [
+      ;;Line i bounds line lineNo on the left.
+      set t_left ( max (list t_left t) )
+
+    ];;end_ifelse
+
+    if (t_left > t_right) [ report false ]
+
+  ];;end_foreach
+
+
+  ifelse ( directionOpt )
+  [
+    ;;Optimize direction.
+    ifelse  ( multiply_vec  optVelocity  direction > 0  )
+    [
+      ;;Take right extreme.
+      ;;new_velocity = lines[lineNo].point + (tRight * lines[lineNo].direction;)
+      set new_velocity add_vec (scale_vec direction t_right ) (point)
+    ]
+    [
+      ;;Take left extreme.
+      set new_velocity add_vec (scale_vec direction t_left ) (point)
+    ]
+  ]
+  [
+    ;;Optimize closest point
+    ;;lines[lineNo].direction * (optVelocity - lines[lineNo].point);
+    let t multiply_vec (direction) (minus_vec optVelocity point)
+
+    ifelse ( t < t_left)
+    [
+      ;;new_velocity = lines[lineNo].point + tLeft * lines[lineNo].direction;
+      set new_velocity add_vec (scale_vec direction t_left ) (point)
+    ]
+    [
+     ifelse( t > t_right)
+      [
+        set new_velocity add_vec (scale_vec direction t_right ) (point)
+      ]
+      [;;t=t_left=t_right
+        set new_velocity add_vec (scale_vec direction t_right ) (point)
+      ];;end_ifelse
+    ];;end_ifelse
+  ];;end_ifelse
+  report true
+end
+
+
+to-report linearProgram2 [ lines _radius optVelocity directionOpt]
+
+  ifelse ( directionOpt )
+  [set new_velocity scale_vec optVelocity _radius]
+  [
+    ifelse ( abs_Sq optVelocity > sqrt _radius)
+    [set new_velocity scale_vec normalize optVelocity _radius]
+    [set new_velocity optVelocity]
+  ]
+
+  foreach (range length lines) [ lineNo ->
+    let direction ( item 1 (item lineNo lines) )
+    let point (item 0 (item lineNo lines) )
+    if (det direction minus_vec point new_velocity  > 0)
+    [
+      ;;new_velocity does not satisfy constraint i. Compute new optimal new_velocity.
+      let tmpnew_velocity new_velocity
+      let lp1 linearProgram1 lines lineNo _radius optVelocity directionOpt
+      if (not lp1)
+      [
+        set new_velocity tmpnew_velocity
+        report lineNo
+      ]
+    ]
+  ]
+
+  report (length lines)
+end
+
+
+to linearProgram3 [ lines numObstLines beginLine _radius]
+
+  let dist 0
+
+  foreach (range beginLine (length lines)) [ lineNo ->
+
+   let direction ( item 1 (item lineNo lines) )
+   let point (item 0 (item lineNo lines) )
+
+   ;;if (det(lines[i].direction, lines[i].point - new_velocity) > distance)
+   if ( (det (direction) (minus_vec (point) (new_velocity)) ) > dist )
+   [
+      ;;new_velocity does not satisfy constraint of line i.
+      let projLines []
+      foreach (range 0 numObstLines) [ i ->
+        set projLines lput item i lines projLines
+
+      ]
+
+      foreach (range numObstLines (lineNo)) [ j ->
+
+        let line []
+        let direction_j ( item 1 (item j lines) )
+        let point_j (item 0 (item j lines) )
+
+        let determinant det direction direction_j
+
+        ifelse  (abs determinant <= 0.0000001)
+        [
+          ;;Line i and line j are parallel.
+          ifelse( (multiply_vec direction direction_j) > 0)
+          [
+            ;;Line i and line j point in the same direction.
+            ;;continue
+          ]
+          [
+            ;;Line i and line j point in opposite direction.
+            ;;line.point = 0.5f * (lines[i].point + lines[j].point);
+            set line lput (scale_vec (add_vec point point_j) 0.5) line
+          ];;end_ifelse
+        ]
+        [
+          ;;line.point = lines[i].point + (det(lines[j].direction, lines[i].point - lines[j].point) / determinant) * lines[i].direction;
+          ;; p = a + b
+          let m minus_vec point point_j
+          let d det direction_j m
+          let b scale_vec direction ( d / determinant )
+          let p add_vec point b
+          set line lput p line
+        ];;end_ifelse
+
+
+          set line lput ( normalize (minus_vec direction_j direction) ) line
+          set projLines lput line projLines
+
+      ] ;;end_foreach
+
+      let tmpnew_velocity new_velocity
+
+      ;;linearProgram2(projLines, radius, Vector2(-lines[i].direction.y(), lines[i].direction.x()), true)
+      let optVelocity_ list (- (item 1 direction) ) (item 0 direction)
+      let lp2 linearProgram2 projLines _radius optVelocity_ true
+      if (lp2 < length projLines) [set new_velocity tmpnew_velocity]
+
+    set dist (det (direction) (minus_vec point new_velocity))
+    ]
+
+  ]
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;;============================================================================================================
+;;============================================================================================================
+;;============================================================================================================
+
 
 ;;https://stackoverflow.com/questions/39984709/how-can-i-check-wether-a-point-is-inside-the-circumcircle-of-3-points
 ;;https://www.wikiwand.com/en/Delaunay_triangulation
@@ -460,14 +1043,12 @@ to test
   ]
 end
 
-
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 475
 10
-1034
-570
+884
+420
 -1
 -1
 1.0
@@ -477,13 +1058,13 @@ GRAPHICS-WINDOW
 1
 1
 0
-0
-0
 1
--275
-275
--275
-275
+1
+1
+-200
+200
+-200
+200
 0
 0
 1
@@ -497,9 +1078,9 @@ SLIDER
 106
 number_of_robots
 number_of_robots
-0
-250
-250.0
+1
+150
+16.0
 1
 1
 NIL
@@ -590,7 +1171,7 @@ max_Voronoi_Tesselation_iterations
 max_Voronoi_Tesselation_iterations
 1
 35
-10.0
+4.0
 1
 1
 NIL
@@ -605,17 +1186,17 @@ tessellation_convergence_goal
 tessellation_convergence_goal
 0
 2
-0.55
+0.8
 0.05
 1
 NIL
 HORIZONTAL
 
 BUTTON
-77
-340
-140
-373
+32
+314
+95
+347
 NIL
 test
 NIL
@@ -671,20 +1252,97 @@ robot_size
 robot_size
 3
 20
-7.0
+11.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
-151
-340
-214
-373
+106
+314
+169
+347
 NIL
 go
 T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+24
+389
+196
+422
+max_speed
+max_speed
+0
+1
+0.6
+0.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+25
+432
+214
+465
+collision_detection_range
+collision_detection_range
+5
+100
+51.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+24
+473
+196
+506
+time_step
+time_step
+1
+10
+1.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+229
+390
+401
+423
+factor
+factor
+0.1
+1
+1.0
+0.1
+1
+NIL
+HORIZONTAL
+
+BUTTON
+191
+313
+266
+346
+NIL
+move_o
+NIL
 1
 T
 OBSERVER
