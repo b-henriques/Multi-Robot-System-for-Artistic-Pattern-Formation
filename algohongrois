@@ -102,7 +102,12 @@ la somme des distances de chaque robot a sa destination
 . Si il n'y a pas de zero non couvert passer a l'etape 3
 
 --> Etape 2'
-.
+.On est dans le cas où l'on n'a pas sélectionné le nombre maximal de zéros indépendants.
+. z0 le seul 0' pas couvert, z1 le zéro selectionné sur la colonne de z0;
+Soit alors, zi, i pair, le 0' sur la ligne de zi-1 et zi , i impair, le zéeo selectionné sur la colonne de zi-1
+La suite zi comprend alors un 0' de plus que de zéro sélectionné. On peut alors directement substituer ces 0' aux zéros sélectionnés de la suite. 
+On a alors un ensemble avec un zéro indépendant de plus que précédemment. On retourne à l'étape 1, en gardant les nouveaux zéros sélectionnés, 
+mais en effaçant les primes, et les couvertures de colonnes et lignes.
 
 --> Etape 3:
 . Trouver A la valeur minimum de la sous-matrice des elements non couvert trouves a l'etape 2, il faut ajouter A a toutes les lignes couvertes
