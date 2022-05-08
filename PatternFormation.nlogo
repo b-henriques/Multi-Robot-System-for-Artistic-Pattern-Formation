@@ -1105,8 +1105,8 @@ GRAPHICS-WINDOW
 250
 -250
 250
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -1404,7 +1404,7 @@ SWITCH
 562
 show_grid
 show_grid
-1
+0
 1
 -1000
 
