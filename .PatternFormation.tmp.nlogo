@@ -621,10 +621,11 @@ to show_guideLines
     ]
   ]
 
-  if (show_detection_collision_range)
+  if (show_velocity)
   [
+    let col who
     ask patches in-radius collision_detection_range [
-      set pcolor [who] of myself
+      set pcolor col
     ]
   ]
 
