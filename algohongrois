@@ -1,0 +1,110 @@
+--> Calcul d'un ensemble de positions finales des robots
+on assigne une position finale aux robots, couverture de voronoi avec fonction de cout
+a minimiser
+on utilisera l'algo hongrois pour que a chaque iteration on trouve une bijection entre les robots
+et les positions qui minimisera la fonction de cout
+
+chaque robot calcule une vitesse pour atteindre sa destination independamment des autres
+robots avec une formule
+
+chaque robots calcule une vitesse de collision proche de sa vitesse a lui en prenant la position 
+actuelle et la vitesse des autres robots en compte puis se met en mouvement
+
+------------------
+
+to algohongrois
+	set liste_robots [robots]
+	set liste_particules [particules]
+	for each [liste_robots]
+		for each [liste_particules]
+		# fonction distance
+		let matrice matrix:from-row-list [ distance entre robots et particules]
+	print matrix:dimensions matrice
+---
+	pour chaque ligne i de la matrice 
+		let lig : matrix:get-row matrice row-i
+		let a:min[lig]
+		foreach [lig]
+			[ [lig] - a ]
+	pour chaque colonne j de la matrice
+		let col : matrix:get column matrice col-j
+		let b:min[col]
+		foreach [col]
+			[ [col] - b]
+---
+	Parcourir la matrice :
+		set liste_zeros_marques []
+		set liste_ligne_marques []
+		set liste_colonnes_marques []
+		set liste_lignes_non_marques []
+		set_colonnes_non_marques []
+		let c : matrix : get matrice row -i col -j
+		if (c==0) et (colonne sans zeros marques) et (ligne sans zeros marqués)
+			liste_zeros_marques = liste_zeros_marques + [indice_c]
+		if (nb zeros marques ) == ( nb robots) STOP
+-----
+
+	Pour chaque zeros marques :
+		liste_colonnes_marques = [chaque colonne avec zeros marques]
+		liste_ligne_marques = [chaque ligne avec pas de zeros marques]
+	Parcourir la matrice :
+		if tous les zeros marques passer a etape 3
+----
+	
+	matrix:submatrix matrice [ des elements non marques]
+	let lamdba = min submatrix matrice
+	liste_ligne_marques = liste_lignes_marques + lambda
+	liste_colonnes_non_marques = liste_colonnes_non_marques -lambda
+	
+	--> Revenir Etape 1
+
+
+# matric:submatrix matrice r1 c1 r2 c2	
+# let a:min [liste] : donne la valeur minimale de la liste
+# foreach [liste]
+	[ [liste] - a ] ?? : retirer la valeur minimale a tous les memnbre d'une liste	
+# matrix:get matrice row-i col-j : donne la valeur de l'element a la ligne i et colonne j de la matrice
+# matrix:get-row matrice row-i : liste de la ligne i de la matrice
+# matrix:get column matrix col-j : liste de la colonne j de la matrice
+----------------
+
+On a m patterns et on veut la position des n robots finales
+--> On donne des patterns a utiliser 
+--> On definit les robots
+
+minimiser : l
+
+
+----------------
+--> Soit n robots et n positions
+--> On construit une matrice n*n qui aura la distance de chaque robot pour chaque destination
+--> On veut affecter a chaque robot une destination afin de miniminiser la distance total donc
+la somme des distances de chaque robot a sa destination
+[a1 = distance du robot A a la position 1, a2 = distance du robot A a la position 2
+[b1 = distance du robot B a la position 1 
+[c1 =
+[
+
+--> Etape 0 :
+.pour chaque ligne de la matrice on soustrait a l'ensemble de la ligne la valeur minimale de la ligne, chaque ligne aura donc au moins un 0
+.On repete la meme operation sur les colonnes, on aura donc au moins un zero par ligne et par colonne 
+
+--> Etape 1 :
+. On parcourt les zeros dans la matrice et ils deviennent rouge si pas dans la meme ligne ou colonne d'un zero deja marqué
+. Si on a selectionne n zeros alors on arrete l'algorithme
+. Si on a selectionne au moins un zero supplementaire, decouvrez toute les lignes et les colonnes et retirez tous les primes
+
+--> Etape 2 :
+. Couvrir chaque colonne ayant un zero selectionné et chaque ligne n'ayant aucun zero selectionné
+. Choisir un zero non couvert et le marquer d'un ':
+	. Si ya un zero selectionne sur sa ligne alors decouvrez la colonne de ce zero la et couvrez la ligne
+	. Si y pas de zero selectionne sur sa ligne alors on a pas selectionne le nombre max de zeros independant --> passer a l'etape 2'
+. Si il n'y a pas de zero non couvert passer a l'etape 3
+
+--> Etape 2'
+.
+
+--> Etape 3:
+. Trouver A la valeur minimum de la sous-matrice des elements non couvert trouves a l'etape 2, il faut ajouter A a toutes les lignes couvertes
+et la retirer a toutes les colonnes non couvertes
+. Revenir a l'etape 1 en conservant la selection des zeros, la couvertures des lignes et colonnes et les primes 
